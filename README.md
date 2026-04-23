@@ -33,7 +33,7 @@ Custom full-stack property management platform for **Hestia Real Estate Developm
 
 1. Install: `pnpm install` (from repo root; requires [pnpm](https://pnpm.io)).
 2. Copy `infra/env/.env.example` to `.env` in `apps/api` and `apps/web` as needed.
-3. Start Postgres: `docker compose -f infra/docker-compose.yml up -d`
+3. Start Postgres: `docker compose -f infra/docker-compose.yml up -d` (empty DB; schema is **not** auto-loaded).
 4. Apply schema and seeds to the `property_ops` database (includes **`super_admin`** role and admin user roles):
    - **Greenfield:** `docker exec -i property_ops_postgres psql -U app_user -d property_ops < db/schema.sql`
    - **Upgrading an older DB:** apply `db/migrations/*.sql` in order (see [`db/MIGRATIONS.md`](db/MIGRATIONS.md)).

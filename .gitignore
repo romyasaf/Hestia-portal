@@ -8,6 +8,8 @@ build
 .env.local
 coverage
 *.log
-pnpm-lock.yaml
+# Workspace uses a single lockfile at repo root; ignore stray per-package lockfiles.
+apps/*/pnpm-lock.yaml
+packages/*/pnpm-lock.yaml
 yarn.lock
 package-lock.json
