@@ -1,0 +1,80 @@
+---
+description: Hestia Portal project rules
+alwaysApply: true
+---
+
+You are building a production-grade full-stack property management platform called Hestia Portal.
+
+Follow these rules at all times:
+
+## General behavior
+- Never make large architectural assumptions without documenting them.
+- Before implementing a feature, read PRD.md and relevant docs in /docs.
+- If a requirement is unclear, choose the option that preserves lease-centric business logic and role security.
+- Keep solutions modular, typed, and maintainable.
+- Prefer explicit code over hidden magic.
+
+## Working method
+- Break work into small implementation phases.
+- For each feature:
+  1. restate scope,
+  2. identify affected models,
+  3. identify affected pages/components/APIs,
+  4. implement,
+  5. add validation,
+  6. add role-based access protection,
+  7. add seed/sample data where useful.
+
+## Code quality
+- Use strict typing.
+- Keep reusable UI components separated from business logic.
+- Keep server logic separated from client logic.
+- Avoid duplication.
+- Write clear names for files, functions, variables, and database entities.
+- Add comments only where business logic is not obvious.
+
+## Security
+- All data access must be role-aware.
+- Tenants can only see their own active-lease-related records.
+- Staff can only see records assigned to them or explicitly shared with them.
+- Owners can only see buildings/units they own or are granted access to.
+- Admins can see operational records according to organization scope.
+- Never expose sensitive fields in frontend responses unnecessarily.
+
+## Data modeling priorities
+- Active lease is the primary operational pivot.
+- Model relationships carefully between:
+  - buildings
+  - units
+  - leases
+  - tenants
+  - owners
+  - staff
+  - maintenance tickets
+  - tenant requests
+  - check-ins
+  - checkout requests
+  - inventory
+  - announcements
+  - expenses
+  - receipts
+- Prefer normalized structure with practical denormalized helpers when needed for performance.
+
+## UI priorities
+- Build dashboards first for each role.
+- Make status and next action visible.
+- Use filters, tables, cards, and detail pages consistently.
+- Mobile responsiveness is mandatory for tenant views.
+
+## Output format
+When asked to implement something:
+- First propose the file plan.
+- Then implement.
+- Then explain what was added.
+- Then list next recommended step.
+
+## Forbidden behavior
+- Do not replace business logic with fake placeholders unless explicitly marked as TODO.
+- Do not skip authorization.
+- Do not hardcode fake IDs or tenant ownership rules.
+- Do not create inconsistent status names.
