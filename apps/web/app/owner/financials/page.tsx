@@ -1,12 +1,18 @@
 import Link from "next/link";
 import { requireSession } from "@/server/auth/session";
-import { getOwnerFinancialSummary, listOwnedPropertiesForUser } from "@/server/queries/owner-portal";
+import {
+  getOwnerFinancialSummary,
+  listOwnedPropertiesForUser,
+  listOwnerOperatorContractPayments
+} from "@/server/queries/owner-portal";
+import { expensePaymentLabel } from "@/lib/accounting/statuses";
 
 export default async function OwnerFinancialsPage() {
   const session = await requireSession();
-  const [properties, summary] = await Promise.all([
+  const [properties, summary, operatorPayments] = await Promise.all([
     listOwnedPropertiesForUser(session.user.id),
-    getOwnerFinancialSummary(session.user.id, 90)
+    getOwnerFinancialSummary(session.user.id, 90),
+    listOwnerOperatorContractPayments(session.user.id, 365)
   ]);
 
   return (
@@ -49,12 +55,36 @@ export default async function OwnerFinancialsPage() {
             </div>
           </dl>
           <p className="text-xs text-muted-foreground">
-            Managed buildings include tenant lease and unit-linked flows. Operator (fixed-lease) buildings only include
-            building-level expenses and non-lease company payments (for example tickets or jobs), not tenant rent
-            receipts.
+            Managed buildings include tenant lease and unit-linked flows. Operator (fixed-lease) buildings show company
+            payments to you from recorded <strong className="text-foreground">owner contracts</strong> only — not tenant
+            rent or unit-level income.
           </p>
         </section>
       )}
+
+      {operatorPayments.length > 0 ? (
+        <section className="space-y-3 rounded-xl border border-border bg-card p-6 shadow-sm">
+          <h2 className="text-lg font-semibold tracking-tight">Company payments (operator contracts)</h2>
+          <p className="text-sm text-muted-foreground">
+            Fixed-lease installments generated from your owner agreements with the company. Status updates when finance marks
+            an installment paid.
+          </p>
+          <ul className="divide-y divide-border text-sm">
+            {operatorPayments.map((p) => (
+              <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 py-3 first:pt-0">
+                <div>
+                  <span className="font-mono text-xs text-muted-foreground">{p.expenseDate}</span>
+                  <span className="ml-2">{p.scopeLabel}</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="font-mono tabular-nums">{p.amount}</span>
+                  <span className="rounded-md bg-muted px-2 py-0.5 text-xs">{expensePaymentLabel(p.paymentStatus)}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </main>
   );
 }

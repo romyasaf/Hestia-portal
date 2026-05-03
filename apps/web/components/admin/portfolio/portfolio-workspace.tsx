@@ -1,10 +1,11 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { PropertyOwnerFinancialToggle } from "@/components/admin/property-owner-financial-toggle";
 import { CANONICAL_LEASE_STATUSES } from "@/lib/leases/status";
+import { propertyScopeLabel } from "@/lib/owner/property-scope";
 import { cn } from "@/lib/utils";
 import type {
   AdminPortfolioSnapshot,
+  PortfolioContractRow,
   PortfolioExpiringLease,
   PortfolioLeaseRow,
   PortfolioOwnerRow,
@@ -16,6 +17,10 @@ import type {
   PortfolioUnitRow,
   PortfolioVacantUnit
 } from "@/server/queries/admin-portfolio";
+import {
+  PortfolioBuildingLifecycleButton,
+  PortfolioUnitLifecycleButtons
+} from "@/components/admin/portfolio/portfolio-lifecycle-buttons";
 
 type PropertyOpt = { id: string; code: string; name: string };
 
@@ -29,16 +34,18 @@ export type PortfolioWorkspaceData = {
   ownerRows: PortfolioOwnerRow[];
   tenantRows: PortfolioTenantRow[];
   leaseRows: PortfolioLeaseRow[];
+  contractRows: PortfolioContractRow[];
   propertyOptions: PropertyOpt[];
 };
 
 const TABS: { id: PortfolioTab; label: string }[] = [
   { id: "overview", label: "Overview" },
+  { id: "contracts", label: "Contracts" },
+  { id: "owners", label: "Owners" },
   { id: "buildings", label: "Buildings" },
   { id: "units", label: "Units" },
-  { id: "owners", label: "Owners" },
-  { id: "tenants", label: "Tenants" },
-  { id: "leases", label: "Leases" }
+  { id: "leases", label: "Leases" },
+  { id: "tenants", label: "Tenants" }
 ];
 
 function tabHref(tab: PortfolioTab, preserve?: Record<string, string | undefined>) {
@@ -105,8 +112,8 @@ function RelLinks({
         </Link>
       ) : null}
       {unitId ? (
-        <Link href={`/admin/units/${unitId}`} className="text-primary hover:underline">
-          Unit
+        <Link href={`/admin/portfolio/units/${unitId}`} className="text-primary hover:underline">
+          Unit detail
         </Link>
       ) : null}
       {tenantId ? (
@@ -127,17 +134,29 @@ export function PortfolioWorkspace({
   tab,
   unitPropertyId,
   unitOccupancy,
+  unitQ,
+  buildingQ,
+  ownerQ,
+  tenantQ,
   leasePropertyId,
   leaseStatus,
   leaseQ,
+  contractQ,
+  contractPropertyId,
   data
 }: {
   tab: PortfolioTab;
   unitPropertyId?: string;
   unitOccupancy?: PortfolioUnitOccupancy;
+  unitQ?: string;
+  buildingQ?: string;
+  ownerQ?: string;
+  tenantQ?: string;
   leasePropertyId?: string;
   leaseStatus?: string;
   leaseQ?: string;
+  contractQ?: string;
+  contractPropertyId?: string;
   data: PortfolioWorkspaceData;
 }) {
   const { snapshot } = data;
@@ -148,10 +167,14 @@ export function PortfolioWorkspace({
         <header className="border-b border-border/80 pb-8">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Admin</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">Portfolio</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-            Owner → building → unit → lease → tenant. Ownership can sit on the building record, on individual units, or
-            both (unit direct owner overrides the building owner for that unit). Use the tabs below to work each slice.
-          </p>
+          <div className="mt-6">
+            <Link
+              href="/admin/portfolio/new-owner-agreement"
+              className="inline-flex h-11 shrink-0 items-center justify-center rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
+            >
+              + Start New Owner Agreement
+            </Link>
+          </div>
           <nav
             className="mt-8 flex flex-wrap gap-2 border-t border-border/60 pt-6"
             aria-label="Portfolio sections"
@@ -173,7 +196,22 @@ export function PortfolioWorkspace({
           </nav>
         </header>
 
-        <div className="py-10">{renderTab(tab, { unitPropertyId, unitOccupancy, leasePropertyId, leaseStatus, leaseQ, data })}</div>
+        <div className="py-10">
+          {renderTab(tab, {
+            unitPropertyId,
+            unitOccupancy,
+            unitQ,
+            buildingQ,
+            ownerQ,
+            tenantQ,
+            leasePropertyId,
+            leaseStatus,
+            leaseQ,
+            contractQ,
+            contractPropertyId,
+            data
+          })}
+        </div>
       </div>
     </div>
   );
@@ -184,13 +222,32 @@ function renderTab(
   ctx: {
     unitPropertyId?: string;
     unitOccupancy?: PortfolioUnitOccupancy;
+    unitQ?: string;
+    buildingQ?: string;
+    ownerQ?: string;
+    tenantQ?: string;
     leasePropertyId?: string;
     leaseStatus?: string;
     leaseQ?: string;
+    contractQ?: string;
+    contractPropertyId?: string;
     data: PortfolioWorkspaceData;
   }
 ): ReactNode {
-  const { data, unitPropertyId, unitOccupancy, leasePropertyId, leaseStatus, leaseQ } = ctx;
+  const {
+    data,
+    unitPropertyId,
+    unitOccupancy,
+    unitQ,
+    buildingQ,
+    ownerQ,
+    tenantQ,
+    leasePropertyId,
+    leaseStatus,
+    leaseQ,
+    contractQ,
+    contractPropertyId
+  } = ctx;
   const s = data.snapshot;
 
   if (tab === "overview") {
@@ -291,15 +348,32 @@ function renderTab(
             title="Buildings"
             subtitle="Building-level owner is optional. Units may add a direct owner that overrides the building for that unit."
           />
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium">
-            <Link href="/admin/properties/new" className="text-primary hover:underline">
-              New building →
-            </Link>
-            <Link href="/admin/properties" className="text-primary hover:underline">
-              Owners & financial toggles →
-            </Link>
-          </div>
+          <Link href="/admin/properties" className="text-sm font-medium text-primary hover:underline">
+            All properties admin →
+          </Link>
         </div>
+        <form
+          className="mt-4 flex flex-wrap items-end gap-3 rounded-2xl border border-border/70 bg-card/50 p-4"
+          method="get"
+        >
+          <input type="hidden" name="tab" value="buildings" />
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            Search
+            <input
+              name="buildingQ"
+              type="search"
+              defaultValue={buildingQ ?? ""}
+              placeholder="Name, code, street, city…"
+              className="h-10 w-56 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+            />
+          </label>
+          <button
+            type="submit"
+            className="h-10 rounded-md bg-foreground px-4 text-sm font-medium text-background hover:bg-foreground/90"
+          >
+            Apply
+          </button>
+        </form>
         <div className="mt-6 overflow-hidden rounded-2xl border border-border/80 bg-card/80 shadow-sm">
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -309,7 +383,7 @@ function renderTab(
                 <th className="px-4 py-3 font-medium">Occupied</th>
                 <th className="px-4 py-3 font-medium">Building owner</th>
                 <th className="px-4 py-3 font-medium">Ownership summary</th>
-                <th className="px-4 py-3 font-medium" />
+                <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/80">
@@ -319,7 +393,8 @@ function renderTab(
                     <p className="font-medium text-foreground">
                       {p.code} · {p.name}
                     </p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="mt-1 text-xs text-muted-foreground">{p.formattedAddress}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
                       Financial visibility: {p.ownerFinancialAccess ? "On" : "Off"}
                     </p>
                   </td>
@@ -344,10 +419,23 @@ function renderTab(
                     )}
                   </td>
                   <td className="max-w-[14rem] px-4 py-3 text-xs text-muted-foreground">{p.ownershipSummary}</td>
-                  <td className="px-4 py-3 text-right">
-                    <Link href={`/admin/portfolio/properties/${p.id}`} className="font-medium text-primary hover:underline">
-                      Detail
-                    </Link>
+                  <td className="space-y-2 px-4 py-3 text-right text-sm">
+                    <div className="flex flex-col items-end gap-1">
+                      <Link
+                        href={`/admin/portfolio/properties/${p.id}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        View
+                      </Link>
+                      <Link href={`/admin/properties/${p.id}/edit`} className="text-primary/90 hover:underline">
+                        Edit
+                      </Link>
+                    </div>
+                    <PortfolioBuildingLifecycleButton
+                      propertyId={p.id}
+                      propertyLabel={`${p.code} · ${p.name}`}
+                      canHardDelete={p.canHardDeleteProperty}
+                    />
                   </td>
                 </tr>
               ))}
@@ -364,7 +452,7 @@ function renderTab(
         <div className="flex flex-wrap items-end justify-between gap-4">
           <SectionTitle
             title="Units"
-            subtitle="Each unit belongs to a building. Resolved owner = direct unit owner, else building owner, else unassigned."
+            subtitle="Visual cards by building. Resolved owner = direct unit owner, else building owner, else unassigned. Open a card for a read-only summary, or Edit for forms."
           />
           <Link href="/admin/units/new" className="text-sm font-medium text-primary hover:underline">
             New unit →
@@ -372,6 +460,16 @@ function renderTab(
         </div>
         <form className="mt-4 flex flex-wrap items-end gap-3 rounded-2xl border border-border/70 bg-card/50 p-4" method="get">
           <input type="hidden" name="tab" value="units" />
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            Search
+            <input
+              name="unitQ"
+              type="search"
+              defaultValue={unitQ ?? ""}
+              placeholder="Unit #, listing, building…"
+              className="h-10 w-52 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+            />
+          </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
             Building
             <select
@@ -406,78 +504,85 @@ function renderTab(
             Apply
           </button>
         </form>
-        <div className="mt-6 overflow-hidden rounded-2xl border border-border/80 bg-card/80 shadow-sm">
-          <table className="w-full min-w-[960px] text-left text-sm">
-            <thead className="border-b border-border bg-muted/40 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3 font-medium">Unit</th>
-                <th className="px-4 py-3 font-medium">Building</th>
-                <th className="px-4 py-3 font-medium">Resolved owner</th>
-                <th className="px-4 py-3 font-medium">Inventory status</th>
-                <th className="px-4 py-3 font-medium">Occupancy</th>
-                <th className="px-4 py-3 font-medium">Tenant / lease</th>
-                <th className="px-4 py-3 font-medium" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/80">
-              {data.unitRows.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
-                    No units match these filters.
-                  </td>
-                </tr>
-              ) : (
-                data.unitRows.map((u) => (
-                  <tr key={u.id} className="hover:bg-muted/25">
-                    <td className="px-4 py-3 font-medium text-foreground">{u.unitNumber}</td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {u.propertyCode} · {u.propertyName}
-                    </td>
-                    <td className="max-w-[13rem] px-4 py-3 text-xs text-muted-foreground">
-                      <span className="text-foreground">{u.resolvedOwnerLabel}</span>
-                      {u.directUnitOwner ? (
-                        <p className="mt-1 text-[11px]">Direct on unit</p>
-                      ) : u.buildingOwner ? (
-                        <p className="mt-1 text-[11px]">From building</p>
-                      ) : (
-                        <p className="mt-1 text-[11px]">Unassigned</p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{u.unitStatus}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-xs font-medium",
-                          u.occupancy === "occupied" ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200" : "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        {u.occupancy === "occupied" ? "Occupied" : "Vacant"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {u.lease ? (
-                        <>
-                          {u.lease.tenantName}
-                          <br />
-                          <span className="text-xs">
-                            Lease to {u.lease.endDate} · {u.lease.status}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-xs">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Link href={`/admin/units/${u.id}`} className="font-medium text-primary hover:underline">
-                        Open
-                      </Link>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        {data.unitRows.length === 0 ? (
+          <div className="mt-6 rounded-2xl border border-dashed border-border bg-muted/20 px-6 py-14 text-center text-sm text-muted-foreground">
+            No units match these filters.
+          </div>
+        ) : (
+          <ul className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            {data.unitRows.map((u) => (
+              <li
+                key={u.id}
+                className="group flex flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm transition-shadow hover:shadow-md"
+              >
+                <Link href={`/admin/portfolio/units/${u.id}`} className="relative block aspect-[16/10] bg-muted">
+                  {u.listingCoverImageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- admin + local URLs
+                    <img
+                      src={u.listingCoverImageUrl}
+                      alt=""
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-muted to-muted/60 px-4 text-center">
+                      <span className="text-2xl font-semibold tabular-nums text-muted-foreground">{u.unitNumber}</span>
+                      <span className="mt-1 text-xs text-muted-foreground">No listing image</span>
+                    </div>
+                  )}
+                  <span
+                    className={cn(
+                      "absolute right-3 top-3 rounded-full px-2.5 py-0.5 text-[11px] font-semibold shadow-sm backdrop-blur",
+                      u.occupancy === "occupied"
+                        ? "bg-emerald-950/80 text-emerald-50"
+                        : "bg-background/90 text-foreground ring-1 ring-border"
+                    )}
+                  >
+                    {u.occupancy === "occupied" ? "Occupied" : "Available"}
+                  </span>
+                </Link>
+                <div className="flex flex-1 flex-col p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {u.propertyCode} · {u.propertyName}
+                  </p>
+                  <h3 className="mt-1 line-clamp-2 text-base font-semibold leading-snug tracking-tight text-foreground">
+                    <Link href={`/admin/portfolio/units/${u.id}`} className="hover:text-primary hover:underline">
+                      {u.marketingTitle}
+                    </Link>
+                  </h3>
+                  <p className="mt-3 text-lg font-semibold tabular-nums text-foreground">{u.displayPriceLabel}</p>
+                  {u.lease ? (
+                    <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                      Tenant: {u.lease.tenantName} · lease to {u.lease.endDate}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-xs text-muted-foreground">No active lease · unit status: {u.unitStatus}</p>
+                  )}
+                  <div className="mt-auto flex flex-wrap gap-2 pt-4">
+                    <Link
+                      href={`/admin/portfolio/units/${u.id}`}
+                      className="inline-flex h-9 flex-1 items-center justify-center rounded-md bg-foreground text-sm font-medium text-background hover:bg-foreground/90 sm:flex-none sm:px-4"
+                    >
+                      View
+                    </Link>
+                    <Link
+                      href={`/admin/units/${u.id}?section=overview`}
+                      className="inline-flex h-9 flex-1 items-center justify-center rounded-md border border-input bg-background text-sm font-medium hover:bg-muted/60 sm:flex-none sm:px-4"
+                    >
+                      Edit
+                    </Link>
+                  </div>
+                  <div className="border-t border-border/60 px-4 py-3">
+                    <PortfolioUnitLifecycleButtons
+                      unitId={u.id}
+                      unitLabel={`${u.propertyCode} · unit ${u.unitNumber}`}
+                      canHardDelete={u.canHardDeleteUnit}
+                    />
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     );
   }
@@ -497,6 +602,28 @@ function renderTab(
             Create owner account
           </Link>
         </div>
+        <form
+          className="mt-4 flex flex-wrap items-end gap-3 rounded-2xl border border-border/70 bg-card/50 p-4"
+          method="get"
+        >
+          <input type="hidden" name="tab" value="owners" />
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            Search
+            <input
+              name="ownerQ"
+              type="search"
+              defaultValue={ownerQ ?? ""}
+              placeholder="Name or email…"
+              className="h-10 w-56 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+            />
+          </label>
+          <button
+            type="submit"
+            className="h-10 rounded-md bg-foreground px-4 text-sm font-medium text-background hover:bg-foreground/90"
+          >
+            Apply
+          </button>
+        </form>
         <div className="mt-6 overflow-hidden rounded-2xl border border-border/80 bg-card/80 shadow-sm">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -505,7 +632,7 @@ function renderTab(
                 <th className="px-4 py-3 font-medium">Buildings</th>
                 <th className="px-4 py-3 font-medium">Units on those buildings</th>
                 <th className="px-4 py-3 font-medium">Direct unit stakes</th>
-                <th className="px-4 py-3 font-medium" />
+                <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/80">
@@ -525,9 +652,127 @@ function renderTab(
                     <td className="px-4 py-3 tabular-nums text-muted-foreground">{o.buildingsOwned}</td>
                     <td className="px-4 py-3 tabular-nums text-muted-foreground">{o.unitsOnOwnedBuildings}</td>
                     <td className="px-4 py-3 tabular-nums text-muted-foreground">{o.unitsOwnedDirectly}</td>
+                    <td className="space-y-1 px-4 py-3 text-right text-sm">
+                      <Link href={`/admin/owners/${o.userId}`} className="block font-medium text-primary hover:underline">
+                        View
+                      </Link>
+                      <Link href={`/admin/owners/${o.userId}`} className="block text-primary/90 hover:underline">
+                        Edit
+                      </Link>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    );
+  }
+
+  if (tab === "contracts") {
+    return (
+      <section>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <SectionTitle
+            title="Owner contracts"
+            subtitle="Company ↔ owner agreements. Add new contracts from an owner profile, or use Start New Owner Agreement for a full setup."
+          />
+          <Link href="/admin/owners" className="text-sm font-medium text-primary hover:underline">
+            Owner directory →
+          </Link>
+        </div>
+        <form
+          className="mt-4 flex flex-wrap items-end gap-3 rounded-2xl border border-border/70 bg-card/50 p-4"
+          method="get"
+        >
+          <input type="hidden" name="tab" value="contracts" />
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            Search
+            <input
+              name="contractQ"
+              type="search"
+              defaultValue={contractQ ?? ""}
+              placeholder="Owner, building…"
+              className="h-10 w-56 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            Building
+            <select
+              name="contractProperty"
+              defaultValue={contractPropertyId ?? ""}
+              className="h-10 min-w-[12rem] rounded-md border border-input bg-background px-3 text-sm text-foreground"
+            >
+              <option value="">All buildings</option>
+              {data.propertyOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.code} · {o.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="submit"
+            className="h-10 rounded-md bg-foreground px-4 text-sm font-medium text-background hover:bg-foreground/90"
+          >
+            Apply
+          </button>
+        </form>
+        <div className="mt-6 overflow-hidden rounded-2xl border border-border/80 bg-card/80 shadow-sm">
+          <table className="w-full min-w-[880px] text-left text-sm">
+            <thead className="border-b border-border bg-muted/40 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3 font-medium">Owner</th>
+                <th className="px-4 py-3 font-medium">Building</th>
+                <th className="px-4 py-3 font-medium">Scope</th>
+                <th className="px-4 py-3 font-medium">Type</th>
+                <th className="px-4 py-3 font-medium">Dates</th>
+                <th className="px-4 py-3 font-medium">Amount</th>
+                <th className="px-4 py-3 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/80">
+              {data.contractRows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                    No owner contracts yet.
+                  </td>
+                </tr>
+              ) : (
+                data.contractRows.map((c) => (
+                  <tr key={c.id} className="hover:bg-muted/25">
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-foreground">{c.ownerName}</p>
+                      <p className="text-xs text-muted-foreground">{c.ownerEmail}</p>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {c.propertyCode && c.propertyName ? (
+                        <>
+                          {c.propertyCode} · {c.propertyName}
+                        </>
+                      ) : (
+                        <span className="text-xs">—</span>
+                      )}
+                      {c.unitNumber ? (
+                        <span className="mt-1 block text-xs">Unit {c.unitNumber}</span>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{propertyScopeLabel(c.propertyScope)}</td>
+                    <td className="px-4 py-3 text-xs capitalize text-muted-foreground">{c.contractType}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {c.startDate} → {c.endDate}
+                      {c.contractStatus ? (
+                        <span className="mt-1 block capitalize">({c.contractStatus})</span>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-muted-foreground">{c.amount}</td>
                     <td className="px-4 py-3 text-right">
-                      <Link href={tabHref("buildings")} className="font-medium text-primary hover:underline">
-                        Buildings hub
+                      <Link
+                        href={`/admin/owners/${c.ownerUserId}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        View / edit
                       </Link>
                     </td>
                   </tr>
@@ -549,6 +794,28 @@ function renderTab(
             New tenant user →
           </Link>
         </div>
+        <form
+          className="mt-4 flex flex-wrap items-end gap-3 rounded-2xl border border-border/70 bg-card/50 p-4"
+          method="get"
+        >
+          <input type="hidden" name="tab" value="tenants" />
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            Search
+            <input
+              name="tenantQ"
+              type="search"
+              defaultValue={tenantQ ?? ""}
+              placeholder="Name or email…"
+              className="h-10 w-56 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+            />
+          </label>
+          <button
+            type="submit"
+            className="h-10 rounded-md bg-foreground px-4 text-sm font-medium text-background hover:bg-foreground/90"
+          >
+            Apply
+          </button>
+        </form>
         <div className="mt-6 overflow-hidden rounded-2xl border border-border/80 bg-card/80 shadow-sm">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -556,7 +823,7 @@ function renderTab(
                 <th className="px-4 py-3 font-medium">Tenant</th>
                 <th className="px-4 py-3 font-medium">Unit / building</th>
                 <th className="px-4 py-3 font-medium">Lease</th>
-                <th className="px-4 py-3 font-medium" />
+                <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/80">
@@ -587,9 +854,12 @@ function renderTab(
                       "—"
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <Link href={`/admin/tenants/${t.userId}`} className="font-medium text-primary hover:underline">
-                      Open
+                  <td className="space-y-1 px-4 py-3 text-right text-sm">
+                    <Link href={`/admin/tenants/${t.userId}`} className="block font-medium text-primary hover:underline">
+                      View
+                    </Link>
+                    <Link href={`/admin/tenants/${t.userId}`} className="block text-primary/90 hover:underline">
+                      Edit
                     </Link>
                   </td>
                 </tr>
@@ -668,7 +938,7 @@ function renderTab(
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">Dates</th>
               <th className="px-4 py-3 font-medium">Rent</th>
-              <th className="px-4 py-3 font-medium" />
+              <th className="px-4 py-3 font-medium text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/80">
@@ -692,9 +962,12 @@ function renderTab(
                     {l.startDate} → {l.endDate}
                   </td>
                   <td className="px-4 py-3 tabular-nums text-muted-foreground">{l.rentAmount}</td>
-                  <td className="px-4 py-3 text-right">
-                    <Link href={`/admin/leases/${l.id}`} className="font-medium text-primary hover:underline">
-                      Open
+                  <td className="space-y-1 px-4 py-3 text-right text-sm">
+                    <Link href={`/admin/leases/${l.id}`} className="block font-medium text-primary hover:underline">
+                      View
+                    </Link>
+                    <Link href={`/admin/leases/${l.id}`} className="block text-primary/90 hover:underline">
+                      Edit
                     </Link>
                   </td>
                 </tr>

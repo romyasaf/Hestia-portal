@@ -4,6 +4,7 @@ import {
   getPortfolioExpiringLeases,
   getPortfolioRecentLeases,
   getPortfolioVacantUnits,
+  listPortfolioContractRows,
   listPortfolioLeaseRows,
   listPortfolioOwnerRows,
   listPortfolioPropertyRows,
@@ -11,6 +12,7 @@ import {
   listPortfolioUnitRows,
   listPropertiesForPortfolioFilters,
   parsePortfolioTab,
+  type PortfolioContractListFilter,
   type PortfolioTab,
   type PortfolioUnitOccupancy
 } from "@/server/queries/admin-portfolio";
@@ -33,13 +35,26 @@ export default async function AdminPortfolioPage({
   const tab: PortfolioTab = parsePortfolioTab(searchParams.tab);
   const unitPropertyId = typeof searchParams.property === "string" ? searchParams.property : undefined;
   const unitOccupancy = parseUnitOccupancy(searchParams.occupancy);
+  const unitQ = typeof searchParams.unitQ === "string" ? searchParams.unitQ.slice(0, 120) : undefined;
+  const buildingQ =
+    typeof searchParams.buildingQ === "string" ? searchParams.buildingQ.slice(0, 120) : undefined;
+  const ownerQ = typeof searchParams.ownerQ === "string" ? searchParams.ownerQ.slice(0, 120) : undefined;
+  const tenantQ = typeof searchParams.tenantQ === "string" ? searchParams.tenantQ.slice(0, 120) : undefined;
   const leasePropertyId =
     typeof searchParams.leaseProperty === "string" ? searchParams.leaseProperty : undefined;
   const leaseStatus = typeof searchParams.leaseStatus === "string" ? searchParams.leaseStatus : undefined;
   const leaseQ = typeof searchParams.leaseQ === "string" ? searchParams.leaseQ.slice(0, 120) : undefined;
+  const contractQ = typeof searchParams.contractQ === "string" ? searchParams.contractQ.slice(0, 120) : undefined;
+  const contractPropertyId =
+    typeof searchParams.contractProperty === "string" ? searchParams.contractProperty : undefined;
 
   const occFilter: PortfolioUnitOccupancy =
     unitOccupancy === "occupied" || unitOccupancy === "vacant" ? unitOccupancy : "all";
+
+  const contractFilter: PortfolioContractListFilter = {
+    q: contractQ,
+    propertyId: contractPropertyId
+  };
 
   const [
     snapshot,
@@ -51,22 +66,24 @@ export default async function AdminPortfolioPage({
     unitRows,
     ownerRows,
     tenantRows,
-    leaseRows
+    leaseRows,
+    contractRows
   ] = await Promise.all([
     getAdminPortfolioSnapshot(),
     listPropertiesForPortfolioFilters(),
     getPortfolioRecentLeases(6),
     getPortfolioVacantUnits(8),
     getPortfolioExpiringLeases(8),
-    listPortfolioPropertyRows(),
-    listPortfolioUnitRows({ propertyId: unitPropertyId, occupancy: occFilter }),
-    listPortfolioOwnerRows(),
-    listPortfolioTenantRows(),
+    listPortfolioPropertyRows({ q: buildingQ }),
+    listPortfolioUnitRows({ propertyId: unitPropertyId, occupancy: occFilter, q: unitQ }),
+    listPortfolioOwnerRows({ q: ownerQ }),
+    listPortfolioTenantRows({ q: tenantQ }),
     listPortfolioLeaseRows({
       propertyId: leasePropertyId,
       status: leaseStatus || undefined,
       q: leaseQ
-    })
+    }),
+    listPortfolioContractRows(contractFilter)
   ]);
 
   const data: PortfolioWorkspaceData = {
@@ -79,6 +96,7 @@ export default async function AdminPortfolioPage({
     ownerRows,
     tenantRows,
     leaseRows,
+    contractRows,
     propertyOptions
   };
 
@@ -87,9 +105,15 @@ export default async function AdminPortfolioPage({
       tab={tab}
       unitPropertyId={unitPropertyId}
       unitOccupancy={unitOccupancy}
+      unitQ={unitQ}
+      buildingQ={buildingQ}
+      ownerQ={ownerQ}
+      tenantQ={tenantQ}
       leasePropertyId={leasePropertyId}
       leaseStatus={leaseStatus}
       leaseQ={leaseQ}
+      contractQ={contractQ}
+      contractPropertyId={contractPropertyId}
       data={data}
     />
   );

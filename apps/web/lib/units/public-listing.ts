@@ -35,6 +35,7 @@ export function isUnitListingComplete(unit: {
   listingCoverImageUrl: string | null | undefined;
   listingMonthlyPrice: Prisma.Decimal | null | undefined;
   monthlyRent: Prisma.Decimal | null | undefined;
+  listingGalleryUrls?: Prisma.JsonValue | null | undefined;
 }): boolean {
   const title = unit.listingTitle?.trim();
   const description = unit.listingDescription?.trim();
@@ -44,4 +45,18 @@ export function isUnitListingComplete(unit: {
     return false;
   }
   return Number(price) > 0;
+}
+
+/**
+ * Public /listings: show only when there is no calendar-active tenant lease and listing data is complete.
+ * Call with `hasActiveCalendarLease` from a lease query (same day UTC window as portfolio).
+ */
+export function isUnitVisibleOnPublicListings(
+  unit: Parameters<typeof isUnitListingComplete>[0],
+  hasActiveCalendarLease: boolean
+): boolean {
+  if (hasActiveCalendarLease) {
+    return false;
+  }
+  return isUnitListingComplete(unit);
 }

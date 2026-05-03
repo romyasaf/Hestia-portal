@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { listTenantUsersForAdmin } from "@/server/queries/admin-entities";
+import { tenantTypeLabel, normalizeTenantType } from "@/lib/tenants/constants";
+import { listTenantUsersForAdminTable } from "@/server/queries/admin-entities";
 
 export default async function AdminTenantsPage() {
-  const tenants = await listTenantUsersForAdmin();
+  const tenants = await listTenantUsersForAdminTable();
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
@@ -32,6 +33,7 @@ export default async function AdminTenantsPage() {
             <thead className="border-b bg-muted/50 text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 font-medium">Name</th>
+                <th className="px-4 py-3 font-medium">Type</th>
                 <th className="px-4 py-3 font-medium">Email</th>
                 <th className="px-4 py-3 font-medium">Active</th>
                 <th className="px-4 py-3 font-medium" />
@@ -41,11 +43,14 @@ export default async function AdminTenantsPage() {
               {tenants.map((t) => (
                 <tr key={t.id} className="hover:bg-muted/30">
                   <td className="px-4 py-3">{t.fullName}</td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {tenantTypeLabel(normalizeTenantType(t.tenantProfile?.tenantType))}
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">{t.email}</td>
                   <td className="px-4 py-3">{t.isActive ? "Yes" : "No"}</td>
                   <td className="px-4 py-3">
                     <Link href={`/admin/tenants/${t.id}`} className="text-primary hover:underline">
-                      Edit
+                      Details
                     </Link>
                   </td>
                 </tr>

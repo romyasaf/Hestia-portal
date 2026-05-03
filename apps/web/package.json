@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "prisma generate",
     "dev": "next dev -p 3000",
     "build": "prisma generate && next build",
     "start": "next start -p 3000",
@@ -12,7 +13,11 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:validate": "tsx scripts/validate-db-schema.ts"
+    "db:validate": "tsx scripts/validate-db-schema.ts",
+    "db:apply-015": "tsx scripts/run-prisma-with-env.ts db execute --file ../../db/migrations/015_property_structured_address.sql --schema prisma/schema.prisma",
+    "db:apply-016": "tsx scripts/run-prisma-with-env.ts db execute --file ../../db/migrations/016_checkin_inventory_master.sql --schema prisma/schema.prisma",
+    "db:apply-017": "tsx scripts/run-prisma-with-env.ts db execute --file ../../db/migrations/017_owner_contracts.sql --schema prisma/schema.prisma",
+    "db:apply-030": "tsx scripts/run-prisma-with-env.ts db execute --file ../../db/migrations/030_unit_system_core.sql --schema prisma/schema.prisma"
   },
   "dependencies": {
     "@hestia/config": "workspace:*",

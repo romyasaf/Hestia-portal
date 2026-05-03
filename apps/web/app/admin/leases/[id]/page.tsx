@@ -38,7 +38,19 @@ export default async function AdminEditLeasePage({ params }: Props) {
           endDate: lease.endDate.toISOString().slice(0, 10),
           rentAmount: lease.rentAmount.toString(),
           depositAmount: lease.depositAmount.toString(),
-          status: lease.status
+          status: lease.status,
+          paymentFrequency: lease.paymentFrequency,
+          digitalSignatureStatus: lease.digitalSignatureStatus,
+          unsignedContractDocumentUrl: lease.unsignedContractDocumentUrl,
+          signedContractDocumentUrl: lease.signedContractDocumentUrl,
+          chequeDeliveryState: lease.chequeDeliveryState,
+          chequeAppointmentDate: lease.chequeAppointmentAt
+            ? lease.chequeAppointmentAt.toISOString().slice(0, 10)
+            : "",
+          chequeAppointmentNotes: lease.chequeAppointmentNotes,
+          onboardingContractSigned: lease.onboardingContractSigned,
+          onboardingChequeReceived: lease.onboardingChequeReceived,
+          onboardingCheckinCompleted: lease.onboardingCheckinCompleted
         }}
       />
       <AdminLeaseChequePanel
@@ -46,6 +58,7 @@ export default async function AdminEditLeasePage({ params }: Props) {
         chequeDeliveryState={lease.chequeDeliveryState}
         chequeMarkedDeliveredAt={lease.chequeMarkedDeliveredAt?.toISOString() ?? null}
         chequeApprovedAt={lease.chequeApprovedAt?.toISOString() ?? null}
+        chequeReceivedAt={lease.chequeReceivedAt?.toISOString() ?? null}
         onboardingCompletedAt={lease.onboardingCompletedAt?.toISOString() ?? null}
       />
     </div>

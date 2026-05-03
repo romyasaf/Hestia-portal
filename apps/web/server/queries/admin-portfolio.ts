@@ -1,6 +1,35 @@
+import { formatFinanceMoney } from "@/lib/finance/format-money";
+import { formatBuildingAddressLine } from "@/lib/portfolio/building-address";
 import { formatResolvedOwnerLine, resolveUnitOwner } from "@/lib/portfolio/ownership";
 import { leaseStatusActiveWhere } from "@/lib/leases/status";
+import type { Prisma } from "@prisma/client";
+import { parseStringArrayJson, unitListingDisplayPrice } from "@/lib/units/public-listing";
 import { prisma } from "@/lib/prisma";
+
+/** DB may lag Prisma schema (e.g. migration 025 not applied); cache optional `owner_contracts` columns per process. */
+let ownerContractOptionalColsCache: { propertyScope: boolean; contractStatus: boolean } | null = null;
+
+async function ownerContractOptionalColumns(): Promise<{
+  propertyScope: boolean;
+  contractStatus: boolean;
+}> {
+  if (ownerContractOptionalColsCache) {
+    return ownerContractOptionalColsCache;
+  }
+  const rows = await prisma.$queryRaw<Array<{ column_name: string }>>`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'owner_contracts'
+      AND column_name IN ('property_scope', 'contract_status')
+  `;
+  const names = new Set(rows.map((r) => r.column_name));
+  ownerContractOptionalColsCache = {
+    propertyScope: names.has("property_scope"),
+    contractStatus: names.has("contract_status")
+  };
+  return ownerContractOptionalColsCache;
+}
 
 function utcTodayDateOnly(): Date {
   const now = new Date();
@@ -24,6 +53,7 @@ export type PortfolioTab =
   | "buildings"
   | "units"
   | "owners"
+  | "contracts"
   | "tenants"
   | "leases";
 
@@ -34,7 +64,7 @@ export function parsePortfolioTab(
   if (v === "properties" || v === "buildings") {
     return "buildings";
   }
-  if (v === "units" || v === "owners" || v === "tenants" || v === "leases") {
+  if (v === "units" || v === "owners" || v === "contracts" || v === "tenants" || v === "leases") {
     return v;
   }
   return "overview";
@@ -133,7 +163,13 @@ export async function getPortfolioRecentLeases(take = 6): Promise<PortfolioRecen
   const rows = await prisma.lease.findMany({
     orderBy: { createdAt: "desc" },
     take,
-    include: {
+    select: {
+      id: true,
+      status: true,
+      createdAt: true,
+      startDate: true,
+      endDate: true,
+      rentAmount: true,
       tenant: { select: { id: true, fullName: true } },
       unit: {
         select: {
@@ -202,7 +238,9 @@ export async function getPortfolioExpiringLeases(take = 8): Promise<PortfolioExp
     },
     orderBy: { endDate: "asc" },
     take,
-    include: {
+    select: {
+      id: true,
+      endDate: true,
       tenant: { select: { fullName: true } },
       unit: {
         select: {
@@ -227,12 +265,15 @@ export type PortfolioPropertyRow = {
   id: string;
   code: string;
   name: string;
+  formattedAddress: string;
   unitCount: number;
   occupiedUnits: number;
   ownerFinancialAccess: boolean;
   owner: { id: string; fullName: string; email: string } | null;
   /** Human-readable mix of building-level vs unit-level ownership. */
   ownershipSummary: string;
+  /** True only when the building and all its units have no leases, tickets, expenses, or owner contracts. */
+  canHardDeleteProperty: boolean;
 };
 
 function summarizeBuildingOwnership(
@@ -260,7 +301,7 @@ function summarizeBuildingOwnership(
   return `${withDirect} unit-level · ${n - withDirect} inherit building`;
 }
 
-export async function listPortfolioPropertyRows(): Promise<PortfolioPropertyRow[]> {
+export async function listPortfolioPropertyRows(filters?: { q?: string }): Promise<PortfolioPropertyRow[]> {
   const today = utcTodayDateOnly();
   const activeLeases = await prisma.lease.findMany({
     where: activeLeaseWhere(today),
@@ -268,28 +309,70 @@ export async function listPortfolioPropertyRows(): Promise<PortfolioPropertyRow[
   });
   const occupiedUnits = new Set(activeLeases.map((l) => l.unitId));
 
+  const bq = filters?.q?.trim().toLowerCase();
   const properties = await prisma.property.findMany({
+    where: bq
+      ? {
+          OR: [
+            { name: { contains: bq, mode: "insensitive" } },
+            { code: { contains: bq, mode: "insensitive" } },
+            { addressStreet: { contains: bq, mode: "insensitive" } },
+            { city: { contains: bq, mode: "insensitive" } }
+          ]
+        }
+      : undefined,
     orderBy: { code: "asc" },
     select: {
       id: true,
       code: true,
       name: true,
+      addressZone: true,
+      addressStreet: true,
+      addressBuildingNumber: true,
+      addressAreaName: true,
+      addressNotes: true,
+      city: true,
       ownerFinancialAccess: true,
       owner: { select: { id: true, fullName: true, email: true } },
-      units: { select: { id: true, ownerUserId: true } }
+      units: {
+        select: {
+          id: true,
+          ownerUserId: true,
+          _count: {
+            select: { leases: true, expenses: true, ownerContracts: true, tickets: true, jobs: true }
+          }
+        }
+      },
+      _count: { select: { tickets: true, expenses: true, ownerContracts: true, jobs: true } }
     }
   });
 
-  return properties.map((p) => ({
-    id: p.id,
-    code: p.code,
-    name: p.name,
-    unitCount: p.units.length,
-    occupiedUnits: p.units.filter((u) => occupiedUnits.has(u.id)).length,
-    ownerFinancialAccess: p.ownerFinancialAccess,
-    owner: p.owner,
-    ownershipSummary: summarizeBuildingOwnership(p.owner, p.units)
-  }));
+  return properties.map((p) => {
+    const unitBlocked = p.units.some(
+      (u) =>
+        u._count.leases +
+          u._count.expenses +
+          u._count.ownerContracts +
+          u._count.tickets +
+          u._count.jobs >
+        0
+    );
+    const propBlocked =
+      p._count.tickets + p._count.expenses + p._count.ownerContracts + p._count.jobs > 0 || unitBlocked;
+    const canHardDeleteProperty = !propBlocked;
+    return {
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      formattedAddress: formatBuildingAddressLine(p),
+      unitCount: p.units.length,
+      occupiedUnits: p.units.filter((u) => occupiedUnits.has(u.id)).length,
+      ownerFinancialAccess: p.ownerFinancialAccess,
+      owner: p.owner,
+      ownershipSummary: summarizeBuildingOwnership(p.owner, p.units),
+      canHardDeleteProperty
+    };
+  });
 }
 
 export type PortfolioUnitOccupancy = "all" | "occupied" | "vacant";
@@ -302,6 +385,11 @@ export type PortfolioUnitRow = {
   propertyCode: string;
   propertyName: string;
   occupancy: "occupied" | "vacant";
+  /** Listing title when set, else a sensible default for cards. */
+  marketingTitle: string;
+  listingCoverImageUrl: string | null;
+  /** Formatted QAR rent / listing price when present. */
+  displayPriceLabel: string;
   lease: {
     id: string;
     status: string;
@@ -313,16 +401,23 @@ export type PortfolioUnitRow = {
   buildingOwner: { id: string; fullName: string; email: string } | null;
   resolvedOwnerLabel: string;
   resolvedOwnerSource: "unit" | "building" | "none";
+  linkedHistoryCount: number;
+  canHardDeleteUnit: boolean;
 };
 
 export async function listPortfolioUnitRows(filters: {
   propertyId?: string;
   occupancy?: PortfolioUnitOccupancy;
+  q?: string;
 }): Promise<PortfolioUnitRow[]> {
   const today = utcTodayDateOnly();
   const activeLeases = await prisma.lease.findMany({
     where: activeLeaseWhere(today),
-    include: {
+    select: {
+      id: true,
+      unitId: true,
+      status: true,
+      endDate: true,
       tenant: { select: { id: true, fullName: true } },
       unit: { select: { id: true } }
     }
@@ -341,8 +436,21 @@ export async function listPortfolioUnitRows(filters: {
     });
   }
 
+  const q = filters.q?.trim().toLowerCase();
   const units = await prisma.unit.findMany({
-    where: filters.propertyId ? { propertyId: filters.propertyId } : undefined,
+    where: {
+      ...(filters.propertyId ? { propertyId: filters.propertyId } : {}),
+      ...(q
+        ? {
+            OR: [
+              { unitNumber: { contains: q, mode: "insensitive" } },
+              { listingTitle: { contains: q, mode: "insensitive" } },
+              { property: { name: { contains: q, mode: "insensitive" } } },
+              { property: { code: { contains: q, mode: "insensitive" } } }
+            ]
+          }
+        : {})
+    },
     orderBy: [{ property: { code: "asc" } }, { unitNumber: "asc" }],
     take: 400,
     select: {
@@ -350,6 +458,10 @@ export async function listPortfolioUnitRows(filters: {
       unitNumber: true,
       status: true,
       propertyId: true,
+      listingTitle: true,
+      listingCoverImageUrl: true,
+      listingMonthlyPrice: true,
+      monthlyRent: true,
       ownerUserId: true,
       owner: { select: { id: true, fullName: true, email: true } },
       property: {
@@ -359,6 +471,9 @@ export async function listPortfolioUnitRows(filters: {
           ownerUserId: true,
           owner: { select: { id: true, fullName: true, email: true } }
         }
+      },
+      _count: {
+        select: { leases: true, expenses: true, ownerContracts: true, tickets: true, jobs: true }
       }
     }
   });
@@ -374,6 +489,17 @@ export async function listPortfolioUnitRows(filters: {
         : null
     });
     const src = resolved.source ?? "none";
+    const price = unitListingDisplayPrice(u);
+    const displayPriceLabel =
+      price == null || Number(price) <= 0 ? "—" : formatFinanceMoney(Number(price));
+    const marketingTitle = u.listingTitle?.trim() || `Unit ${u.unitNumber}`;
+    const linkedHistoryCount =
+      u._count.leases +
+      u._count.expenses +
+      u._count.ownerContracts +
+      u._count.tickets +
+      u._count.jobs;
+    const canHardDeleteUnit = linkedHistoryCount === 0;
     return {
       id: u.id,
       unitNumber: u.unitNumber,
@@ -381,6 +507,9 @@ export async function listPortfolioUnitRows(filters: {
       propertyId: u.propertyId,
       propertyCode: u.property.code,
       propertyName: u.property.name,
+      marketingTitle,
+      listingCoverImageUrl: u.listingCoverImageUrl?.trim() || null,
+      displayPriceLabel,
       occupancy: l ? "occupied" : "vacant",
       lease: l
         ? {
@@ -394,7 +523,9 @@ export async function listPortfolioUnitRows(filters: {
       directUnitOwner: u.owner,
       buildingOwner: u.property.owner,
       resolvedOwnerLabel: formatResolvedOwnerLine(resolved),
-      resolvedOwnerSource: src
+      resolvedOwnerSource: src,
+      linkedHistoryCount,
+      canHardDeleteUnit
     };
   });
 
@@ -415,9 +546,21 @@ export type PortfolioOwnerRow = {
   unitsOwnedDirectly: number;
 };
 
-export async function listPortfolioOwnerRows(): Promise<PortfolioOwnerRow[]> {
+export async function listPortfolioOwnerRows(filters?: { q?: string }): Promise<PortfolioOwnerRow[]> {
+  const oq = filters?.q?.trim().toLowerCase();
   const owners = await prisma.user.findMany({
-    where: { userRoles: { some: { role: { code: "owner" } } }, isActive: true },
+    where: {
+      userRoles: { some: { role: { code: "owner" } } },
+      isActive: true,
+      ...(oq
+        ? {
+            OR: [
+              { fullName: { contains: oq, mode: "insensitive" } },
+              { email: { contains: oq, mode: "insensitive" } }
+            ]
+          }
+        : {})
+    },
     orderBy: { fullName: "asc" },
     select: {
       id: true,
@@ -473,10 +616,21 @@ export type PortfolioTenantRow = {
   } | null;
 };
 
-export async function listPortfolioTenantRows(): Promise<PortfolioTenantRow[]> {
+export async function listPortfolioTenantRows(filters?: { q?: string }): Promise<PortfolioTenantRow[]> {
   const today = utcTodayDateOnly();
+  const tq = filters?.q?.trim().toLowerCase();
   const tenants = await prisma.user.findMany({
-    where: { userRoles: { some: { role: { code: "tenant" } } } },
+    where: {
+      userRoles: { some: { role: { code: "tenant" } } },
+      ...(tq
+        ? {
+            OR: [
+              { fullName: { contains: tq, mode: "insensitive" } },
+              { email: { contains: tq, mode: "insensitive" } }
+            ]
+          }
+        : {})
+    },
     orderBy: { fullName: "asc" },
     select: {
       id: true,
@@ -572,7 +726,12 @@ export async function listPortfolioLeaseRows(f: PortfolioLeaseFilter): Promise<P
     },
     orderBy: { endDate: "desc" },
     take: 200,
-    include: {
+    select: {
+      id: true,
+      status: true,
+      startDate: true,
+      endDate: true,
+      rentAmount: true,
       tenant: { select: { id: true, fullName: true } },
       unit: {
         select: {
@@ -603,6 +762,7 @@ export type PortfolioPropertyDetail = {
   id: string;
   code: string;
   name: string;
+  formattedAddress: string;
   ownerFinancialAccess: boolean;
   owner: { id: string; fullName: string; email: string } | null;
   units: {
@@ -633,6 +793,12 @@ export async function getPortfolioPropertyDetail(propertyId: string): Promise<Po
       id: true,
       code: true,
       name: true,
+      addressZone: true,
+      addressStreet: true,
+      addressBuildingNumber: true,
+      addressAreaName: true,
+      addressNotes: true,
+      city: true,
       ownerFinancialAccess: true,
       owner: { select: { id: true, fullName: true, email: true } },
       units: {
@@ -666,6 +832,7 @@ export async function getPortfolioPropertyDetail(propertyId: string): Promise<Po
     id: p.id,
     code: p.code,
     name: p.name,
+    formattedAddress: formatBuildingAddressLine(p),
     ownerFinancialAccess: p.ownerFinancialAccess,
     owner: p.owner,
     units: p.units.map((u) => {
@@ -698,6 +865,101 @@ export async function getPortfolioPropertyDetail(propertyId: string): Promise<Po
       };
     })
   };
+}
+
+export type PortfolioContractListFilter = {
+  q?: string;
+  ownerUserId?: string;
+  propertyId?: string;
+};
+
+export type PortfolioContractRow = {
+  id: string;
+  contractType: string;
+  propertyScope: string | null;
+  contractStatus: string | null;
+  startDate: string;
+  endDate: string;
+  amount: string;
+  ownerUserId: string;
+  ownerName: string;
+  ownerEmail: string;
+  propertyId: string | null;
+  propertyCode: string | null;
+  propertyName: string | null;
+  unitId: string | null;
+  unitNumber: string | null;
+};
+
+export async function listPortfolioContractRows(
+  f: PortfolioContractListFilter
+): Promise<PortfolioContractRow[]> {
+  const q = f.q?.trim().toLowerCase();
+  const opts = await ownerContractOptionalColumns();
+
+  const select: Prisma.OwnerContractSelect = {
+    id: true,
+    contractType: true,
+    startDate: true,
+    endDate: true,
+    amount: true,
+    ownerUserId: true,
+    owner: { select: { fullName: true, email: true } },
+    property: { select: { id: true, code: true, name: true } },
+    unit: { select: { id: true, unitNumber: true } }
+  };
+  if (opts.propertyScope) {
+    select.propertyScope = true;
+  }
+  if (opts.contractStatus) {
+    select.contractStatus = true;
+  }
+
+  const rows = await prisma.ownerContract.findMany({
+    where: {
+      ...(f.ownerUserId ? { ownerUserId: f.ownerUserId } : {}),
+      ...(f.propertyId ? { propertyId: f.propertyId } : {}),
+      ...(q
+        ? {
+            OR: [
+              { owner: { fullName: { contains: q, mode: "insensitive" } } },
+              { owner: { email: { contains: q, mode: "insensitive" } } },
+              { property: { name: { contains: q, mode: "insensitive" } } },
+              { property: { code: { contains: q, mode: "insensitive" } } }
+            ]
+          }
+        : {})
+    },
+    orderBy: { createdAt: "desc" },
+    take: 250,
+    select
+  });
+
+  return rows.map((r) => {
+    const propertyScope = opts.propertyScope
+      ? (r as { propertyScope?: string | null }).propertyScope ?? null
+      : null;
+    const contractStatus = opts.contractStatus
+      ? (r as { contractStatus?: string | null }).contractStatus ?? null
+      : null;
+    return {
+      id: r.id,
+      contractType: r.contractType,
+      propertyScope,
+      contractStatus,
+      startDate: r.startDate.toISOString().slice(0, 10),
+      endDate: r.endDate.toISOString().slice(0, 10),
+      amount: r.amount.toString(),
+      ownerUserId: r.ownerUserId,
+      ownerName: r.owner.fullName,
+      ownerEmail: r.owner.email,
+      propertyId: r.property?.id ?? null,
+      propertyCode: r.property?.code ?? null,
+      propertyName: r.property?.name ?? null,
+      unitId: r.unit?.id ?? null,
+      unitNumber: r.unit?.unitNumber ?? null
+    };
+  });
 }
 
 export async function listPropertiesForPortfolioFilters() {

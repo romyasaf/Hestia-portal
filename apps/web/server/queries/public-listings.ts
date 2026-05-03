@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   activeCalendarLeaseWhere,
-  isUnitListingComplete,
+  isUnitVisibleOnPublicListings,
   parseStringArrayJson,
   utcTodayDateOnly,
   unitListingDisplayPrice
@@ -58,19 +58,25 @@ async function listPublicListingUnitsInner(): Promise<PublicListingUnit[]> {
 
   const out: PublicListingUnit[] = [];
   for (const u of units) {
-    if (!isUnitListingComplete(u)) {
+    if (!isUnitVisibleOnPublicListings(u, false)) {
       continue;
     }
     const price = unitListingDisplayPrice(u);
-    if (!price || !u.listingTitle?.trim() || !u.listingDescription?.trim() || !u.listingCoverImageUrl?.trim()) {
+    if (!price) {
+      continue;
+    }
+    const title = u.listingTitle?.trim();
+    const desc = u.listingDescription?.trim();
+    const cover = u.listingCoverImageUrl?.trim();
+    if (!title || !desc || !cover) {
       continue;
     }
     out.push({
       id: u.id,
-      listingTitle: u.listingTitle.trim(),
-      listingDescription: u.listingDescription.trim(),
+      listingTitle: title,
+      listingDescription: desc,
       displayPrice: price.toString(),
-      coverImageUrl: u.listingCoverImageUrl.trim(),
+      coverImageUrl: cover,
       galleryUrls: parseStringArrayJson(u.listingGalleryUrls),
       amenities: parseStringArrayJson(u.listingAmenities),
       bedrooms: u.bedrooms,

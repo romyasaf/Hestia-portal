@@ -8,6 +8,9 @@ build
 .env.local
 coverage
 *.log
+# Local Next.js uploads (listing images); keep .gitkeep only
+apps/web/public/uploads/**
+!apps/web/public/uploads/.gitkeep
 # Workspace uses a single lockfile at repo root; ignore stray per-package lockfiles.
 apps/*/pnpm-lock.yaml
 packages/*/pnpm-lock.yaml

@@ -26,7 +26,9 @@ const REQUIRED_PUBLIC_TABLES = [
   "inventory_items",
   "stock_transactions",
   "lead_inquiries",
-  "password_reset_tokens"
+  "password_reset_tokens",
+  "checkin_inventory_master_items",
+  "owner_contracts"
 ] as const;
 
 /**

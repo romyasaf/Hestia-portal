@@ -27,7 +27,7 @@ interface PropertyItem {
   id: string;
   code: string;
   name: string;
-  addressLine1: string;
+  formattedAddress: string;
   city: string;
   country: string;
 }
@@ -115,7 +115,10 @@ export default function DevPlayground() {
   const [assetError, setAssetError] = useState<string | null>(null);
   const [propertyCode, setPropertyCode] = useState("");
   const [propertyName, setPropertyName] = useState("");
-  const [propertyAddress, setPropertyAddress] = useState("");
+  const [propertyZone, setPropertyZone] = useState("");
+  const [propertyStreet, setPropertyStreet] = useState("");
+  const [propertyBuildingNumber, setPropertyBuildingNumber] = useState("");
+  const [propertyAreaName, setPropertyAreaName] = useState("");
   const [propertyCity, setPropertyCity] = useState("Doha");
   const [propertyCountry, setPropertyCountry] = useState("Qatar");
   const [creatingProperty, setCreatingProperty] = useState(false);
@@ -369,6 +372,10 @@ export default function DevPlayground() {
     if (!accessToken) {
       return;
     }
+    if (!propertyCode || !propertyName || !propertyZone || !propertyStreet || !propertyBuildingNumber || !propertyCity) {
+      setAssetError("Fill property code, name, zone, street, building number, and city.");
+      return;
+    }
 
     setCreatingProperty(true);
     setAssetError(null);
@@ -382,7 +389,10 @@ export default function DevPlayground() {
         body: JSON.stringify({
           code: propertyCode,
           name: propertyName,
-          addressLine1: propertyAddress,
+          addressZone: propertyZone,
+          addressStreet: propertyStreet,
+          addressBuildingNumber: propertyBuildingNumber,
+          addressAreaName: propertyAreaName.trim() || undefined,
           city: propertyCity,
           country: propertyCountry
         })
@@ -395,7 +405,10 @@ export default function DevPlayground() {
 
       setPropertyCode("");
       setPropertyName("");
-      setPropertyAddress("");
+      setPropertyZone("");
+      setPropertyStreet("");
+      setPropertyBuildingNumber("");
+      setPropertyAreaName("");
       await loadAssets(accessToken);
     } catch (error) {
       setAssetError(error instanceof Error ? error.message : "Unexpected error.");
@@ -625,12 +638,24 @@ export default function DevPlayground() {
                     <input value={propertyName} onChange={(event) => setPropertyName(event.target.value)} required />
                   </label>
                   <label>
-                    Address
+                    Zone
+                    <input value={propertyZone} onChange={(event) => setPropertyZone(event.target.value)} required />
+                  </label>
+                  <label>
+                    Street
+                    <input value={propertyStreet} onChange={(event) => setPropertyStreet(event.target.value)} required />
+                  </label>
+                  <label>
+                    Building number
                     <input
-                      value={propertyAddress}
-                      onChange={(event) => setPropertyAddress(event.target.value)}
+                      value={propertyBuildingNumber}
+                      onChange={(event) => setPropertyBuildingNumber(event.target.value)}
                       required
                     />
+                  </label>
+                  <label>
+                    Area (optional)
+                    <input value={propertyAreaName} onChange={(event) => setPropertyAreaName(event.target.value)} />
                   </label>
                   <label>
                     City
@@ -772,7 +797,7 @@ export default function DevPlayground() {
                   <ul>
                     {properties.map((property) => (
                       <li key={property.id}>
-                        {property.name} ({property.code}) - {property.city}, {property.country}
+                        {property.name} ({property.code}) — {property.formattedAddress}, {property.country}
                       </li>
                     ))}
                   </ul>

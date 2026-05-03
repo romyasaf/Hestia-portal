@@ -22,7 +22,7 @@ export default async function OwnerBuildingsPage() {
               <p className="font-semibold">
                 {p.code} · {p.name}
               </p>
-              <p className="mt-1 text-muted-foreground">{p.city}</p>
+              <p className="mt-1 text-muted-foreground">{p.formattedAddress}</p>
               <p className="mt-2 text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">Contract: </span>
                 {p.ownerContractType === "operator"

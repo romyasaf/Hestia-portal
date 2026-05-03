@@ -15,7 +15,9 @@ const PRIMARY_NAV = [
 
 const SECONDARY_NAV = [
   { href: "/admin/staff", label: "Staff" },
+  { href: "/admin/owners", label: "Owners" },
   { href: "/admin/announcements", label: "Announcements" },
+  { href: "/admin/check-in-inventory", label: "Check-in inventory" },
   { href: "/admin/reports", label: "Reports" },
   { href: "/", label: "Marketing site" }
 ] as const;

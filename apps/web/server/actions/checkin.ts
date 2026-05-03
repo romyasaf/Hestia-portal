@@ -52,6 +52,14 @@ export async function appendLeaseCheckInIssue(input: {
     return { ok: false, error: "not_found" };
   }
 
+  const lease = await prisma.lease.findUnique({
+    where: { id: row.leaseId },
+    select: { onboardingCheckinCompleted: true }
+  });
+  if (lease?.onboardingCheckinCompleted) {
+    return { ok: false, error: "checkin_sealed" };
+  }
+
   const st = row.status.trim().toLowerCase();
   if (st !== "submitted" && st !== "under_review") {
     return { ok: false, error: "cannot_add_issue" };

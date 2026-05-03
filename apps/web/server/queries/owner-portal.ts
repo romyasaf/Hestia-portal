@@ -1,8 +1,9 @@
 import type { Prisma } from "@prisma/client";
+import { formatBuildingAddressLine } from "@/lib/portfolio/building-address";
 import { leaseStatusActiveWhere } from "@/lib/leases/status";
 import { isOperatorContract } from "@/lib/owner/contract";
-import { ownerOperatorMoneyClauses } from "@/lib/owner/operator-money-scope";
-import { ownerPropertyMoneyOrClauses } from "@/lib/owner/money-scope";
+import { OWNER_LIABILITY_CATEGORY_FILTERS } from "@/lib/owner/finance-categories";
+import { ownerPropertyMoneyOrClauses, ownerUnitMoneyOrClauses } from "@/lib/owner/money-scope";
 import { prisma } from "@/lib/prisma";
 
 function utcTodayDateOnly(): Date {
@@ -15,6 +16,7 @@ export type OwnerPropertyRow = {
   code: string;
   name: string;
   city: string;
+  formattedAddress: string;
   ownerFinancialAccess: boolean;
   /** Building-level contract when you are building owner; unit stakes are always managed. */
   ownerContractType: "operator" | "managed" | null;
@@ -71,6 +73,10 @@ type OwnerBuckets = {
   operatorPropertyIds: string[];
   managedBuildingPropertyIds: string[];
   directUnitPropertyIds: string[];
+  /** Properties where this user is the building-level owner (`properties.owner_user_id`). */
+  buildingOwnerPropertyIds: string[];
+  /** Units where this user is the direct owner (`units.owner_user_id`). */
+  ownedUnitIds: string[];
 };
 
 async function loadOwnerBuckets(userId: string): Promise<OwnerBuckets> {
@@ -81,7 +87,7 @@ async function loadOwnerBuckets(userId: string): Promise<OwnerBuckets> {
     }),
     prisma.unit.findMany({
       where: { ownerUserId: userId },
-      select: { propertyId: true }
+      select: { id: true, propertyId: true }
     })
   ]);
 
@@ -95,7 +101,15 @@ async function loadOwnerBuckets(userId: string): Promise<OwnerBuckets> {
     }
   }
   const directUnitPropertyIds = [...new Set(unitOwned.map((u) => u.propertyId))];
-  return { operatorPropertyIds, managedBuildingPropertyIds, directUnitPropertyIds };
+  const buildingOwnerPropertyIds = buildingOwned.map((p) => p.id);
+  const ownedUnitIds = unitOwned.map((u) => u.id);
+  return {
+    operatorPropertyIds,
+    managedBuildingPropertyIds,
+    directUnitPropertyIds,
+    buildingOwnerPropertyIds,
+    ownedUnitIds
+  };
 }
 
 function managedPortfolioPropertyIds(b: OwnerBuckets): string[] {
@@ -134,6 +148,11 @@ export async function listOwnedPropertiesForUser(userId: string): Promise<OwnerP
         id: true,
         code: true,
         name: true,
+        addressZone: true,
+        addressStreet: true,
+        addressBuildingNumber: true,
+        addressAreaName: true,
+        addressNotes: true,
         city: true,
         ownerFinancialAccess: true,
         ownerContractType: true
@@ -147,6 +166,11 @@ export async function listOwnedPropertiesForUser(userId: string): Promise<OwnerP
             id: true,
             code: true,
             name: true,
+            addressZone: true,
+            addressStreet: true,
+            addressBuildingNumber: true,
+            addressAreaName: true,
+            addressNotes: true,
             city: true,
             ownerFinancialAccess: true,
             ownerContractType: true
@@ -163,6 +187,7 @@ export async function listOwnedPropertiesForUser(userId: string): Promise<OwnerP
       code: r.code,
       name: r.name,
       city: r.city,
+      formattedAddress: formatBuildingAddressLine(r),
       ownerFinancialAccess: r.ownerFinancialAccess,
       ownerContractType: isOperatorContract(r.ownerContractType) ? "operator" : "managed"
     });
@@ -175,6 +200,7 @@ export async function listOwnedPropertiesForUser(userId: string): Promise<OwnerP
         code: p.code,
         name: p.name,
         city: p.city,
+        formattedAddress: formatBuildingAddressLine(p),
         ownerFinancialAccess: p.ownerFinancialAccess,
         ownerContractType: null
       });
@@ -207,14 +233,22 @@ export async function listOwnerOccupancy(userId: string): Promise<OwnerOccupancy
         },
         orderBy: { startDate: "desc" },
         take: 1,
-        include: { tenant: { select: { fullName: true } } }
+        select: {
+          id: true,
+          status: true,
+          tenant: { select: { fullName: true } }
+        }
       }
     }
   });
 
+  const buildingOwnerSet = new Set(b.buildingOwnerPropertyIds);
+
   const out: OwnerOccupancyRow[] = [];
   for (const u of units) {
-    if (!managedProps.includes(u.propertyId) && u.ownerUserId !== userId) {
+    const userOwnsBuilding = buildingOwnerSet.has(u.propertyId);
+    const userOwnsUnit = u.ownerUserId === userId;
+    if (!userOwnsUnit && !userOwnsBuilding) {
       continue;
     }
     const active = u.leases[0];
@@ -247,16 +281,25 @@ export async function listOwnerLeases(userId: string): Promise<OwnerLeaseRow[]> 
     },
     orderBy: { endDate: "desc" },
     take: 80,
-    include: {
+    select: {
+      id: true,
+      startDate: true,
+      endDate: true,
+      rentAmount: true,
+      status: true,
       tenant: { select: { fullName: true, email: true } },
       unit: { select: { unitNumber: true, propertyId: true, ownerUserId: true, property: { select: { name: true } } } }
     }
   });
 
+  const buildingOwnerSet = new Set(b.buildingOwnerPropertyIds);
+
   const rows: OwnerLeaseRow[] = [];
   for (const l of leases) {
     const u = l.unit;
-    if (u.ownerUserId !== userId && !managedProps.includes(u.propertyId)) {
+    const userOwnsBuilding = buildingOwnerSet.has(u.propertyId);
+    const userOwnsUnit = u.ownerUserId === userId;
+    if (!userOwnsUnit && !userOwnsBuilding) {
       continue;
     }
     rows.push({
@@ -283,6 +326,9 @@ export async function listOwnerTickets(userId: string): Promise<OwnerTicketRow[]
   if (managedProps.length > 0) {
     orClause.push({ propertyId: { in: managedProps } });
   }
+  if (b.ownedUnitIds.length > 0) {
+    orClause.push({ unitId: { in: b.ownedUnitIds } });
+  }
   if (op.length > 0) {
     orClause.push({ AND: [{ propertyId: { in: op } }, { unitId: null }] });
   }
@@ -293,11 +339,28 @@ export async function listOwnerTickets(userId: string): Promise<OwnerTicketRow[]
   const rows = await prisma.ticket.findMany({
     where: { OR: orClause },
     orderBy: { openedAt: "desc" },
-    take: 60,
+    take: 80,
     include: { unit: { select: { unitNumber: true } } }
   });
 
-  return rows.map((t) => ({
+  const operatorSet = new Set(op);
+  const buildingOwnerSet = new Set(b.buildingOwnerPropertyIds);
+  const ownedUnitSet = new Set(b.ownedUnitIds);
+
+  const filtered = rows.filter((t) => {
+    if (operatorSet.has(t.propertyId) && t.unitId == null) {
+      return true;
+    }
+    if (buildingOwnerSet.has(t.propertyId)) {
+      return true;
+    }
+    if (t.unitId && ownedUnitSet.has(t.unitId)) {
+      return true;
+    }
+    return false;
+  });
+
+  return filtered.slice(0, 60).map((t) => ({
     id: t.id,
     ticketNo: t.ticketNo,
     title: t.title,
@@ -313,26 +376,30 @@ export async function getOwnerFinancialSummary(userId: string, sinceDays = 90): 
     where: { ownerUserId: userId, ownerFinancialAccess: true },
     select: { id: true, ownerContractType: true }
   });
-  const unitFinanceProps = await prisma.unit.findMany({
+  const unitFinanceRows = await prisma.unit.findMany({
     where: { ownerUserId: userId, property: { ownerFinancialAccess: true } },
-    select: { propertyId: true }
+    select: { id: true, propertyId: true, property: { select: { ownerUserId: true } } }
   });
 
-  const managedFinanceIds = new Set<string>();
+  const buildingManagedFinanceIds: string[] = [];
   const operatorFinanceIds: string[] = [];
 
   for (const p of financialProps) {
     if (isOperatorContract(p.ownerContractType)) {
       operatorFinanceIds.push(p.id);
     } else {
-      managedFinanceIds.add(p.id);
+      buildingManagedFinanceIds.push(p.id);
     }
   }
-  for (const u of unitFinanceProps) {
-    managedFinanceIds.add(u.propertyId);
+
+  const unitOnlyFinanceUnitIds: string[] = [];
+  for (const u of unitFinanceRows) {
+    if (u.property.ownerUserId !== userId) {
+      unitOnlyFinanceUnitIds.push(u.id);
+    }
   }
 
-  if (managedFinanceIds.size === 0 && operatorFinanceIds.length === 0) {
+  if (buildingManagedFinanceIds.length === 0 && unitOnlyFinanceUnitIds.length === 0 && operatorFinanceIds.length === 0) {
     return null;
   }
 
@@ -343,10 +410,28 @@ export async function getOwnerFinancialSummary(userId: string, sinceDays = 90): 
   const money = (n: { toString(): string } | number | null | undefined) =>
     n == null ? "0" : typeof n === "number" ? String(n) : n.toString();
 
-  const managedClause =
-    managedFinanceIds.size > 0 ? ownerPropertyMoneyOrClauses([...managedFinanceIds]) : null;
-  const operatorClause =
-    operatorFinanceIds.length > 0 ? ownerOperatorMoneyClauses(operatorFinanceIds) : null;
+  const buildingManagedClause =
+    buildingManagedFinanceIds.length > 0
+      ? ownerPropertyMoneyOrClauses(buildingManagedFinanceIds)
+      : null;
+  const unitOnlyClause =
+    unitOnlyFinanceUnitIds.length > 0 ? ownerUnitMoneyOrClauses(unitOnlyFinanceUnitIds) : null;
+
+  const operatorExpenseScope: Prisma.ExpenseWhereInput | null =
+    operatorFinanceIds.length > 0
+      ? {
+          OR: OWNER_LIABILITY_CATEGORY_FILTERS.map((c) => ({
+            category: { equals: c, mode: "insensitive" as const }
+          })),
+          ownerContract: {
+            is: {
+              ownerUserId: userId,
+              contractType: { in: ["operator", "fixed_lease"] },
+              propertyId: { in: operatorFinanceIds }
+            }
+          }
+        }
+      : null;
 
   const baseReceiptWhere = {
     receivedAt: { gte: since },
@@ -371,39 +456,42 @@ export async function getOwnerFinancialSummary(userId: string, sinceDays = 90): 
 
   const parts: { receipts: unknown; expPaid: unknown; expPending: unknown }[] = [];
 
-  if (managedClause) {
+  const runManagedSlice = async (clause: { receipt: Prisma.ReceiptWhereInput; expense: Prisma.ExpenseWhereInput }) => {
     const [r1, e1, e2] = await Promise.all([
       prisma.receipt.aggregate({
-        where: { ...baseReceiptWhere, ...managedClause.receipt },
+        where: { ...baseReceiptWhere, ...clause.receipt },
         _sum: { amount: true }
       }),
       prisma.expense.aggregate({
-        where: { ...baseExpensePaid, ...managedClause.expense },
+        where: { ...baseExpensePaid, ...clause.expense },
         _sum: { amount: true }
       }),
       prisma.expense.aggregate({
-        where: buildPendingExpenseWhere(managedClause.expense),
+        where: buildPendingExpenseWhere(clause.expense),
         _sum: { amount: true }
       })
     ]);
     parts.push({ receipts: r1._sum.amount, expPaid: e1._sum.amount, expPending: e2._sum.amount });
+  };
+
+  if (buildingManagedClause) {
+    await runManagedSlice(buildingManagedClause);
   }
-  if (operatorClause) {
-    const [r1, e1, e2] = await Promise.all([
-      prisma.receipt.aggregate({
-        where: { ...baseReceiptWhere, ...operatorClause.receipt },
+  if (unitOnlyClause) {
+    await runManagedSlice(unitOnlyClause);
+  }
+  if (operatorExpenseScope) {
+    const [e1, e2] = await Promise.all([
+      prisma.expense.aggregate({
+        where: { ...baseExpensePaid, ...operatorExpenseScope },
         _sum: { amount: true }
       }),
       prisma.expense.aggregate({
-        where: { ...baseExpensePaid, ...operatorClause.expense },
-        _sum: { amount: true }
-      }),
-      prisma.expense.aggregate({
-        where: buildPendingExpenseWhere(operatorClause.expense),
+        where: buildPendingExpenseWhere(operatorExpenseScope),
         _sum: { amount: true }
       })
     ]);
-    parts.push({ receipts: r1._sum.amount, expPaid: e1._sum.amount, expPending: e2._sum.amount });
+    parts.push({ receipts: 0, expPaid: e1._sum.amount, expPending: e2._sum.amount });
   }
 
   const dec = (v: unknown) => (v == null ? 0 : Number.parseFloat(String(v)));
@@ -422,4 +510,70 @@ export async function getOwnerFinancialSummary(userId: string, sinceDays = 90): 
     expensesPendingSum: money(expPendingSum),
     sinceLabel: since.toISOString().slice(0, 10)
   };
+}
+
+async function listOperatorFinancePropertyIdsForPortal(userId: string): Promise<string[]> {
+  const rows = await prisma.property.findMany({
+    where: { ownerUserId: userId, ownerFinancialAccess: true },
+    select: { id: true, ownerContractType: true }
+  });
+  return rows.filter((r) => isOperatorContract(r.ownerContractType)).map((r) => r.id);
+}
+
+export type OwnerOperatorContractPaymentRow = {
+  id: string;
+  expenseDate: string;
+  amount: string;
+  paymentStatus: string;
+  scopeLabel: string;
+};
+
+/** Installments the company owes this owner under operator (fixed-lease) owner contracts — not tenant rent. */
+export async function listOwnerOperatorContractPayments(
+  userId: string,
+  sinceDays = 365
+): Promise<OwnerOperatorContractPaymentRow[]> {
+  const operatorPropertyIds = await listOperatorFinancePropertyIdsForPortal(userId);
+  if (operatorPropertyIds.length === 0) {
+    return [];
+  }
+  const since = new Date();
+  since.setUTCDate(since.getUTCDate() - sinceDays);
+  since.setUTCHours(0, 0, 0, 0);
+
+  const rows = await prisma.expense.findMany({
+    where: {
+      expenseDate: { gte: since },
+      OR: OWNER_LIABILITY_CATEGORY_FILTERS.map((c) => ({
+        category: { equals: c, mode: "insensitive" as const }
+      })),
+      ownerContract: {
+        is: {
+          ownerUserId: userId,
+          contractType: { in: ["operator", "fixed_lease"] },
+          propertyId: { in: operatorPropertyIds }
+        }
+      },
+      NOT: { paymentStatus: { equals: "voided", mode: "insensitive" } }
+    },
+    orderBy: { expenseDate: "desc" },
+    take: 200,
+    include: {
+      property: { select: { code: true, name: true } },
+      unit: { select: { unitNumber: true } }
+    }
+  });
+
+  return rows.map((e) => ({
+    id: e.id,
+    expenseDate: e.expenseDate.toISOString().slice(0, 10),
+    amount: e.amount.toString(),
+    paymentStatus: e.paymentStatus.trim().toLowerCase(),
+    scopeLabel:
+      e.unit && e.property
+        ? `${e.property.code} · Unit ${e.unit.unitNumber}`
+        : e.property
+          ? `${e.property.code} · ${e.property.name}`
+          : "—"
+  }));
 }

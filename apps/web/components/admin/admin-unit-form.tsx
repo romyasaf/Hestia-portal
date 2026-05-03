@@ -16,6 +16,9 @@ type Props = {
     propertyId: string;
     unitNumber: string;
     unitType: string;
+    floor: string;
+    areaSqm: string;
+    furnishingStatus: string;
     bedrooms: string;
     bathrooms: string;
     monthlyRent: string;
@@ -33,6 +36,9 @@ export function AdminUnitForm({ properties, ownerOptions, unitId, initial }: Pro
   const [unitOwnerUserId, setUnitOwnerUserId] = useState(initial?.unitOwnerUserId ?? "");
   const [unitNumber, setUnitNumber] = useState(initial?.unitNumber ?? "");
   const [unitType, setUnitType] = useState(initial?.unitType ?? "");
+  const [floor, setFloor] = useState(initial?.floor ?? "");
+  const [areaSqm, setAreaSqm] = useState(initial?.areaSqm ?? "");
+  const [furnishingStatus, setFurnishingStatus] = useState(initial?.furnishingStatus ?? "");
   const [bedrooms, setBedrooms] = useState(initial?.bedrooms ?? "");
   const [bathrooms, setBathrooms] = useState(initial?.bathrooms ?? "");
   const [monthlyRent, setMonthlyRent] = useState(initial?.monthlyRent ?? "");
@@ -48,6 +54,9 @@ export function AdminUnitForm({ properties, ownerOptions, unitId, initial }: Pro
             propertyId,
             unitNumber,
             unitType,
+            floor,
+            areaSqm,
+            furnishingStatus,
             bedrooms,
             bathrooms,
             monthlyRent,
@@ -58,6 +67,9 @@ export function AdminUnitForm({ properties, ownerOptions, unitId, initial }: Pro
             propertyId,
             unitNumber,
             unitType,
+            floor,
+            areaSqm,
+            furnishingStatus,
             bedrooms,
             bathrooms,
             monthlyRent,
@@ -159,6 +171,41 @@ export function AdminUnitForm({ properties, ownerOptions, unitId, initial }: Pro
           onChange={(e) => setUnitType(e.target.value)}
         />
       </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="text-sm font-medium">Floor</label>
+          <input
+            className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            value={floor}
+            onChange={(e) => setFloor(e.target.value)}
+            placeholder="e.g. 3"
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium">Area (m²)</label>
+          <input
+            className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm tabular-nums"
+            value={areaSqm}
+            onChange={(e) => setAreaSqm(e.target.value)}
+            placeholder="Optional"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="text-sm font-medium">Furnishing</label>
+        <select
+          className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+          value={furnishingStatus}
+          onChange={(e) => setFurnishingStatus(e.target.value)}
+        >
+          <option value="">—</option>
+          {["unfurnished", "semi_furnished", "furnished", "unknown"].map((s) => (
+            <option key={s} value={s}>
+              {s.replace(/_/g, " ")}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="grid gap-4 sm:grid-cols-3">
         <div>
           <label className="text-sm font-medium">Bedrooms</label>
@@ -203,7 +250,13 @@ export function AdminUnitForm({ properties, ownerOptions, unitId, initial }: Pro
           ))}
         </select>
       </div>
-      {message ? <p className="text-sm text-destructive">{message}</p> : null}
+      {message ? (
+        <p
+          className={message === "Saved." ? "text-sm text-emerald-700 dark:text-emerald-400" : "text-sm text-destructive"}
+        >
+          {message}
+        </p>
+      ) : null}
       <Button type="submit" disabled={pending}>
         {unitId ? "Save unit" : "Create unit"}
       </Button>

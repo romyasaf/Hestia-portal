@@ -14,10 +14,9 @@ export default async function AdminNewPropertyPage() {
         </Link>
       </p>
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">New property</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">New building</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Add a building record first. Building-level owner is optional; units can have their own direct owner. Flow:
-          owner → building → unit → lease → tenant.
+          Add the building and address. Owner is optional; you can add units and leases next.
         </p>
       </header>
       <AdminPropertyForm ownerOptions={ownerOptions} />

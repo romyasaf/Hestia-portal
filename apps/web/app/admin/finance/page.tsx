@@ -14,6 +14,7 @@ import {
 import {
   countUnlinkedExpenses,
   countUnlinkedReceipts,
+  getFinanceOwnerAutomationSummary,
   getFinancePeriodKpis,
   getFinanceRecentTransactions,
   getFinanceTrendSeries,
@@ -46,6 +47,7 @@ async function FinanceShell({ searchParams }: { searchParams: Record<string, str
 
   const [
     kpis,
+    ownerAutomationSummary,
     trend,
     orphanReceipts,
     orphanExpenses,
@@ -65,6 +67,7 @@ async function FinanceShell({ searchParams }: { searchParams: Record<string, str
     tenantScopeOptions
   ] = await Promise.all([
     getFinancePeriodKpis(timeView, scopeCtx),
+    getFinanceOwnerAutomationSummary(timeView, scopeCtx.scope),
     getFinanceTrendSeries(timeView, scopeCtx.scope),
     countUnlinkedReceipts(),
     countUnlinkedExpenses(),
@@ -94,6 +97,7 @@ async function FinanceShell({ searchParams }: { searchParams: Record<string, str
       unitScopeOptions={unitScopeOptions}
       tenantScopeOptions={tenantScopeOptions}
       kpis={kpis}
+      ownerAutomationSummary={ownerAutomationSummary}
       trend={trend}
       orphanReceipts={orphanReceipts}
       orphanExpenses={orphanExpenses}

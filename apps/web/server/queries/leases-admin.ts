@@ -32,10 +32,16 @@ export async function listActiveLeasesForAdminSelect(): Promise<AdminActiveLease
       endDate: { gte: today }
     },
     orderBy: [{ unit: { property: { name: "asc" } } }, { unit: { unitNumber: "asc" } }],
-    include: {
+    select: {
+      id: true,
+      tenantUserId: true,
+      startDate: true,
+      endDate: true,
       tenant: { select: { id: true, fullName: true, email: true } },
       unit: {
-        include: {
+        select: {
+          id: true,
+          unitNumber: true,
           property: { select: { id: true, code: true, name: true } }
         }
       }

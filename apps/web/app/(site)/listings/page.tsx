@@ -33,8 +33,8 @@ export default async function ListingsPage() {
 
       {units.length === 0 ? (
         <div className="mt-14 rounded-2xl border border-dashed border-border bg-muted/20 px-6 py-12 text-center text-sm text-muted-foreground">
-          No published listings right now. When a unit has no active lease and listing details are complete, it appears
-          here automatically.
+          No published listings right now. When a unit has no active lease and listing details are complete (including
+          at least one gallery image), it appears here automatically.
         </div>
       ) : (
         <ul className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">

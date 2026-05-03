@@ -51,7 +51,7 @@ export function CreateReceiptForm({ leaseOptions, ticketOptions, invoiceOptions,
       if (!res.ok) {
         const map: Record<string, string> = {
           invalid_amount: "Enter a valid amount.",
-          missing_financial_link: "Link this receipt to a lease, ticket, invoice, or checkout.",
+          missing_financial_link: "Link this receipt to a lease, ticket, invoice, checkout, or owner contract.",
           missing_method: "Select a payment method."
         };
         setMessage(map[res.error] ?? "Could not save receipt.");
@@ -75,7 +75,7 @@ export function CreateReceiptForm({ leaseOptions, ticketOptions, invoiceOptions,
       <h2 className="text-base font-semibold tracking-tight">Record receipt</h2>
       <p className="text-xs text-muted-foreground sm:text-sm">
         Money received. <strong className="text-foreground">One link is required</strong> — lease, maintenance ticket,
-        invoice, or checkout — so finance stays traceable.
+        invoice, checkout, or owner contract — so finance stays traceable.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>

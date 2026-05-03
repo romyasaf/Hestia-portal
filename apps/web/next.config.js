@@ -7,7 +7,10 @@ const nextConfig = {
   },
   experimental: {
     instrumentationHook: true,
-    serverComponentsExternalPackages: ["@prisma/client", "prisma"]
+    serverComponentsExternalPackages: ["@prisma/client", "prisma"],
+    serverActions: {
+      bodySizeLimit: "6mb"
+    }
   }
 };
 

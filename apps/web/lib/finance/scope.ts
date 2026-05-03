@@ -50,7 +50,8 @@ export function receiptScopeWhere(s: FinanceScopeDiscriminant): Prisma.ReceiptWh
             ]
           }
         },
-        { leaseCheckout: { lease: { unit: { propertyId: P } } } }
+        { leaseCheckout: { lease: { unit: { propertyId: P } } } },
+        { ownerContract: { propertyId: P } }
       ]
     };
   }
@@ -65,7 +66,8 @@ export function receiptScopeWhere(s: FinanceScopeDiscriminant): Prisma.ReceiptWh
             OR: [{ lease: { unitId: U } }, { job: { unitId: U } }]
           }
         },
-        { leaseCheckout: { lease: { unitId: U } } }
+        { leaseCheckout: { lease: { unitId: U } } },
+        { ownerContract: { unitId: U } }
       ]
     };
   }
@@ -94,7 +96,8 @@ export function expenseScopeWhere(s: FinanceScopeDiscriminant): Prisma.ExpenseWh
         { lease: { unit: { propertyId: P } } },
         { ticket: { propertyId: P } },
         { job: { OR: [{ propertyId: P }, { unit: { propertyId: P } }] } },
-        { leaseCheckout: { lease: { unit: { propertyId: P } } } }
+        { leaseCheckout: { lease: { unit: { propertyId: P } } } },
+        { ownerContract: { propertyId: P } }
       ]
     };
   }
@@ -106,7 +109,8 @@ export function expenseScopeWhere(s: FinanceScopeDiscriminant): Prisma.ExpenseWh
         { lease: { unitId: U } },
         { ticket: { OR: [{ unitId: U }, { lease: { unitId: U } }] } },
         { job: { unitId: U } },
-        { leaseCheckout: { lease: { unitId: U } } }
+        { leaseCheckout: { lease: { unitId: U } } },
+        { ownerContract: { unitId: U } }
       ]
     };
   }

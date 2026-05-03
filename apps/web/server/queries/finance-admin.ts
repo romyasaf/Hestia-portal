@@ -9,6 +9,7 @@ import {
   type FinanceScopeKind
 } from "@/lib/finance/scope";
 import { formatFinanceMoney } from "@/lib/finance/format-money";
+import { leaseNestedForListLabel } from "@/lib/prisma/lease-nested-label-select";
 import { prisma } from "@/lib/prisma";
 
 export type FinanceScopeContext = {
@@ -294,6 +295,71 @@ export async function getFinancePeriodKpis(
   };
 }
 
+const ownerLiabilityExpenseCategories: Prisma.ExpenseWhereInput = {
+  OR: [
+    { category: { equals: "owner_payouts", mode: "insensitive" } },
+    { category: { equals: "owner_payment", mode: "insensitive" } }
+  ]
+};
+
+/** Owner-contract automation: scheduled payouts vs management fee income in the selected period and scope. */
+export type FinanceOwnerAutomationSummary = {
+  ownerPayoutsPendingTotal: number;
+  managementRevenueTotal: number;
+  managementCommissionTotal: number;
+  managementFixedFeeTotal: number;
+};
+
+export async function getFinanceOwnerAutomationSummary(
+  view: FinanceTimeView,
+  scope: FinanceScopeDiscriminant
+): Promise<FinanceOwnerAutomationSummary> {
+  const ownerPendingWhere: Prisma.ExpenseWhereInput = {
+    AND: [
+      expensePeriodWhere(view, scope),
+      ownerLiabilityExpenseCategories,
+      {
+        OR: [
+          { paymentStatus: { equals: "pending", mode: "insensitive" } },
+          { paymentStatus: { equals: "approved", mode: "insensitive" } }
+        ]
+      }
+    ]
+  };
+  const managementReceiptBase: Prisma.ReceiptWhereInput = {
+    AND: [receiptPeriodWhere(view, scope), { category: { equals: "management_revenue", mode: "insensitive" } }]
+  };
+  const [ownerAgg, mgmtAgg, commAgg, fixedAgg] = await Promise.all([
+    prisma.expense.aggregate({
+      where: ownerPendingWhere,
+      _sum: { amount: true }
+    }),
+    prisma.receipt.aggregate({
+      where: managementReceiptBase,
+      _sum: { amount: true }
+    }),
+    prisma.receipt.aggregate({
+      where: {
+        AND: [managementReceiptBase, { subcategory: { equals: "commission_income", mode: "insensitive" } }]
+      },
+      _sum: { amount: true }
+    }),
+    prisma.receipt.aggregate({
+      where: {
+        AND: [managementReceiptBase, { subcategory: { equals: "fixed_management_fee", mode: "insensitive" } }]
+      },
+      _sum: { amount: true }
+    })
+  ]);
+
+  return {
+    ownerPayoutsPendingTotal: Number(ownerAgg._sum.amount ?? 0),
+    managementRevenueTotal: Number(mgmtAgg._sum.amount ?? 0),
+    managementCommissionTotal: Number(commAgg._sum.amount ?? 0),
+    managementFixedFeeTotal: Number(fixedAgg._sum.amount ?? 0)
+  };
+}
+
 export async function getFinanceMonthKpis(): Promise<FinancePeriodKpis> {
   return getFinancePeriodKpis("monthly", FINANCE_SCOPE_ALL);
 }
@@ -531,7 +597,8 @@ export async function countUnlinkedReceipts(): Promise<number> {
       leaseId: null,
       ticketId: null,
       invoiceId: null,
-      leaseCheckoutId: null
+      leaseCheckoutId: null,
+      ownerContractId: null
     }
   });
 }
@@ -544,7 +611,8 @@ export async function countUnlinkedExpenses(): Promise<number> {
       leaseId: null,
       ticketId: null,
       jobId: null,
-      leaseCheckoutId: null
+      leaseCheckoutId: null,
+      ownerContractId: null
     }
   });
 }
@@ -570,12 +638,26 @@ export async function listFinanceIncomeRows(
     orderBy: { receivedAt: "desc" },
     take,
     include: {
-      lease: { include: { unit: true, tenant: { select: { fullName: true } } } },
+      lease: { select: leaseNestedForListLabel },
       ticket: { select: { ticketNo: true, title: true } },
       invoice: { select: { invoiceNo: true, jobId: true, leaseId: true } },
       leaseCheckout: {
         include: {
-          lease: { include: { unit: { select: { unitNumber: true } }, tenant: { select: { fullName: true } } } }
+          lease: {
+            select: {
+              unit: { select: { unitNumber: true } },
+              tenant: { select: { fullName: true } }
+            }
+          }
+        }
+      },
+      ownerContract: {
+        select: {
+          id: true,
+          contractType: true,
+          owner: { select: { fullName: true } },
+          property: { select: { code: true, name: true } },
+          unit: { select: { unitNumber: true } }
         }
       }
     }
@@ -591,6 +673,16 @@ export async function listFinanceIncomeRows(
       linkLabel = r.invoice.invoiceNo;
     } else if (r.leaseCheckout) {
       linkLabel = `Checkout · Unit ${r.leaseCheckout.lease.unit.unitNumber} · ${r.leaseCheckout.lease.tenant.fullName}`;
+    } else if (r.ownerContract) {
+      const oc = r.ownerContract;
+      const who = oc.owner.fullName.trim() || "Owner";
+      const scope =
+        oc.unit && oc.property
+          ? `${oc.property.code} · Unit ${oc.unit.unitNumber}`
+          : oc.property
+            ? `${oc.property.code} · ${oc.property.name}`
+            : "—";
+      linkLabel = `Owner contract (${oc.contractType}) · ${who} · ${scope}`;
     }
 
     const source = r.ticketId
@@ -603,7 +695,9 @@ export async function listFinanceIncomeRows(
             ? "Checkout"
             : r.invoiceId
               ? "Invoice"
-              : "Unlinked";
+              : r.ownerContractId
+                ? "Owner contract"
+                : "Unlinked";
 
     return {
       id: r.id,
@@ -639,12 +733,25 @@ export async function listFinanceExpenseRows(
     take,
     include: {
       property: { select: { code: true, name: true } },
-      lease: { include: { unit: true, tenant: { select: { fullName: true } } } },
+      unit: { select: { unitNumber: true } },
+      lease: { select: leaseNestedForListLabel },
       ticket: { select: { ticketNo: true, title: true } },
       job: { select: { jobNo: true, title: true } },
       leaseCheckout: {
         include: {
-          lease: { include: { unit: { select: { unitNumber: true } }, tenant: { select: { fullName: true } } } }
+          lease: {
+            select: {
+              unit: { select: { unitNumber: true } },
+              tenant: { select: { fullName: true } }
+            }
+          }
+        }
+      },
+      ownerContract: {
+        select: {
+          id: true,
+          contractType: true,
+          owner: { select: { fullName: true } }
         }
       }
     }
@@ -652,12 +759,24 @@ export async function listFinanceExpenseRows(
 
   return rows.map((e) => {
     let linkLabel = "—";
-    if (e.job) {
+    if (e.ownerContract) {
+      const oc = e.ownerContract;
+      const who = oc.owner.fullName.trim() || "Owner";
+      const scope =
+        e.unit && e.property
+          ? `${e.property.code} · Unit ${e.unit.unitNumber}`
+          : e.property
+            ? `${e.property.code} · ${e.property.name}`
+            : "—";
+      linkLabel = `Owner contract (${oc.contractType}) · ${who} · ${scope}`;
+    } else if (e.job) {
       linkLabel = `${e.job.jobNo} · ${e.job.title}`;
     } else if (e.ticket) {
       linkLabel = `${e.ticket.ticketNo} · ${e.ticket.title}`;
     } else if (e.lease) {
       linkLabel = `Lease · Unit ${e.lease.unit.unitNumber}`;
+    } else if (e.property && e.unit) {
+      linkLabel = `${e.property.code} · Unit ${e.unit.unitNumber} · ${e.property.name}`;
     } else if (e.property) {
       linkLabel = `${e.property.code} · ${e.property.name}`;
     } else if (e.leaseCheckout) {

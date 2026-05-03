@@ -16,6 +16,7 @@ import type {
   FinanceExpenseRow,
   FinanceIncomeRow,
   FinanceOverviewTransaction,
+  FinanceOwnerAutomationSummary,
   FinancePaymentRow,
   FinancePeriodKpis,
   FinanceScopeOption,
@@ -35,6 +36,7 @@ export type FinanceWorkspaceProps = {
   unitScopeOptions: FinanceScopeOption[];
   tenantScopeOptions: FinanceScopeOption[];
   kpis: FinancePeriodKpis;
+  ownerAutomationSummary: FinanceOwnerAutomationSummary;
   trend: FinanceTrendPoint[];
   orphanReceipts: number;
   orphanExpenses: number;
@@ -404,6 +406,7 @@ export function FinanceWorkspace(props: FinanceWorkspaceProps) {
             <OverviewPanel
               timeView={props.timeView}
               kpi={k}
+              ownerAutomation={props.ownerAutomationSummary}
               trend={props.trend}
               recent={props.recentTransactions}
               unpaid={props.unpaidInvoices}
@@ -419,7 +422,7 @@ export function FinanceWorkspace(props: FinanceWorkspaceProps) {
               <div className="rounded-2xl border border-border/70 bg-card/80 p-6 shadow-sm">
                 <h2 className="text-lg font-semibold tracking-tight">Record income</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Receipts require a lease, ticket, invoice, or checkout link.
+                  Receipts require a lease, ticket, invoice, checkout, or owner-contract link (API / automation).
                 </p>
                 <div className="mt-4">
                   <CreateReceiptForm
@@ -518,6 +521,7 @@ function FinanceTrendBars({ points, timeView }: { points: FinanceTrendPoint[]; t
 function OverviewPanel({
   timeView,
   kpi,
+  ownerAutomation,
   trend,
   recent,
   unpaid,
@@ -528,6 +532,7 @@ function OverviewPanel({
 }: {
   timeView: FinanceTimeView;
   kpi: FinancePeriodKpis;
+  ownerAutomation: FinanceOwnerAutomationSummary;
   trend: FinanceTrendPoint[];
   recent: FinanceOverviewTransaction[];
   unpaid: UnpaidInvoiceRow[];
@@ -574,6 +579,31 @@ function OverviewPanel({
             .
           </p>
           <FinanceTrendBars points={trend} timeView={timeView} />
+        </div>
+
+        <div className="rounded-2xl border border-border/70 bg-card/90 p-6 shadow-sm">
+          <h2 className="text-lg font-semibold tracking-tight">Owner contracts · automation</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Scheduled owner payouts (pending or approved) and management revenue in this period. {scopeSentence}
+          </p>
+          <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3">
+              <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Owner payouts due</dt>
+              <dd className="mt-1 text-xl font-semibold tabular-nums">{formatFinanceMoney(ownerAutomation.ownerPayoutsPendingTotal)}</dd>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3">
+              <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Management revenue</dt>
+              <dd className="mt-1 text-xl font-semibold tabular-nums">{formatFinanceMoney(ownerAutomation.managementRevenueTotal)}</dd>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3">
+              <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Commission income</dt>
+              <dd className="mt-1 text-lg font-semibold tabular-nums">{formatFinanceMoney(ownerAutomation.managementCommissionTotal)}</dd>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3">
+              <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Fixed management fees</dt>
+              <dd className="mt-1 text-lg font-semibold tabular-nums">{formatFinanceMoney(ownerAutomation.managementFixedFeeTotal)}</dd>
+            </div>
+          </dl>
         </div>
 
         <div className="rounded-2xl border border-border/70 bg-card/90 p-6 shadow-sm">

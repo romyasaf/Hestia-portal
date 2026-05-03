@@ -1,11 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import {
-  parseOnboardingInventory,
-  seedOnboardingInventoryLines,
-  type OnboardingInventoryLine
-} from "@/lib/tenant-lifecycle/inventory-template";
+import { parseOnboardingInventory, type OnboardingInventoryLine } from "@/lib/tenant-lifecycle/inventory-template";
+import { buildOnboardingInventorySeedForUnit } from "@/server/queries/checkin-inventory-merge";
 import { prisma } from "@/lib/prisma";
 import { auditLog } from "@/server/audit/log";
 import { guardActionRoles } from "@/server/auth/action-guard";
@@ -54,7 +51,7 @@ export async function ensureOnboardingCheckinInventory(): Promise<TenantOnboardi
   if (cur.length > 0) {
     return { ok: true };
   }
-  const seeded = seedOnboardingInventoryLines(full.unit.checkinInventoryTemplate);
+  const seeded = await buildOnboardingInventorySeedForUnit(full.unit.checkinInventoryTemplate);
   await prisma.lease.update({
     where: { id: lease.id },
     data: { onboardingCheckinInventory: seeded as unknown as Prisma.InputJsonValue }
@@ -87,7 +84,9 @@ export async function signTenantLeaseContract(input: { signerName: string }): Pr
     where: { id: lease.id },
     data: {
       contractSignedAt: new Date(),
-      contractSignerName: name
+      contractSignerName: name,
+      onboardingContractSigned: true,
+      digitalSignatureStatus: "signed"
     }
   });
   auditLog({
@@ -243,7 +242,8 @@ export async function completeOnboardingCheckIn(input: {
     .filter((l) => l.ack === "issue")
     .map((l) => ({
       summary: `${l.label}: reported at check-in`,
-      details: l.issueSummary?.trim() ?? null,
+      details:
+        [l.issueSummary?.trim(), l.tenantNotes?.trim()].filter(Boolean).join("\n\n").trim() || null,
       severity: "medium" as const,
       areaLabel: l.label
     }));
@@ -268,10 +268,23 @@ export async function completeOnboardingCheckIn(input: {
         }))
       });
     }
+
+    const lineData = lines.map((l) => ({
+      checkInId: checkIn.id,
+      lineKey: l.id,
+      lineLabel: l.label,
+      outcome: l.ack === "confirmed" ? "confirmed" : "issue",
+      issueDescription: l.ack === "issue" ? (l.issueSummary?.trim() || null) : null,
+      tenantLineNotes: l.tenantNotes?.trim() || null
+    }));
+    if (lineData.length > 0) {
+      await tx.leaseCheckInLine.createMany({ data: lineData });
+    }
     await tx.lease.update({
       where: { id: lease.id },
       data: {
         onboardingCompletedAt: new Date(),
+        onboardingCheckinCompleted: true,
         onboardingCheckinInventory: [] as unknown as Prisma.InputJsonValue
       }
     });

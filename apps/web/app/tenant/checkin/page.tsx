@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { AppendCheckInIssueForm } from "@/components/checkin/append-check-in-issue-form";
 import { CheckInReviewControls } from "@/components/checkin/check-in-review-controls";
 import { checkInStatusLabel } from "@/lib/checkin/statuses";
 import { isTerminalCheckInStatus } from "@/lib/checkin/statuses";
@@ -96,10 +95,6 @@ export default async function TenantCheckinPage() {
                 )}
               </div>
             </div>
-
-            {(openDetail.status === "submitted" || openDetail.status === "under_review") && (
-              <AppendCheckInIssueForm checkInId={openDetail.id} />
-            )}
 
             <CheckInReviewControls checkInId={openDetail.id} nextStatuses={nextStatuses} adminNotesEnabled={false} />
           </section>

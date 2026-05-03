@@ -28,6 +28,10 @@ export function TenantOnboardingCheckInForm({ initialLines }: { initialLines: On
     setLines((prev) => prev.map((l) => (l.id === id ? { ...l, issueSummary: text } : l)));
   };
 
+  const setTenantNotes = (id: string, text: string) => {
+    setLines((prev) => prev.map((l) => (l.id === id ? { ...l, tenantNotes: text } : l)));
+  };
+
   const saveDraft = () => {
     setMsg(null);
     start(async () => {
@@ -64,16 +68,33 @@ export function TenantOnboardingCheckInForm({ initialLines }: { initialLines: On
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted-foreground">
-        For each item, choose <strong>OK</strong> or <strong>Issue</strong>. Issues are recorded only during this
-        check-in; after you finish, use maintenance for new problems.
+        For each item, review the expected condition, add optional notes, then choose <strong>OK</strong> or{" "}
+        <strong>Issue</strong>. Issues are recorded only during this check-in; after you finish, use maintenance for new
+        problems.
       </p>
       <ul className="space-y-4">
         {lines.map((line) => (
           <li key={line.id} className="rounded-xl border border-border bg-card p-4 text-sm">
             <p className="font-medium text-foreground">{line.label}</p>
             {line.defaultCondition ? (
-              <p className="mt-1 text-xs text-muted-foreground">Expected: {line.defaultCondition}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Condition: </span>
+                {line.defaultCondition}
+              </p>
             ) : null}
+            {line.notes ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Notes: </span>
+                {line.notes}
+              </p>
+            ) : null}
+            <label className="mt-3 block text-xs font-medium text-muted-foreground">Your notes (optional)</label>
+            <textarea
+              className="mt-1 min-h-[56px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="Anything specific about this item at move-in"
+              value={line.tenantNotes ?? ""}
+              onChange={(e) => setTenantNotes(line.id, e.target.value)}
+            />
             <div className="mt-3 flex flex-wrap gap-2">
               <Button
                 type="button"

@@ -11,12 +11,14 @@ export function AdminLeaseChequePanel({
   chequeDeliveryState,
   chequeMarkedDeliveredAt,
   chequeApprovedAt,
+  chequeReceivedAt,
   onboardingCompletedAt
 }: {
   leaseId: string;
   chequeDeliveryState: string;
   chequeMarkedDeliveredAt: string | null;
   chequeApprovedAt: string | null;
+  chequeReceivedAt: string | null;
   onboardingCompletedAt: string | null;
 }) {
   const router = useRouter();
@@ -43,6 +45,9 @@ export function AdminLeaseChequePanel({
       ) : null}
       {chequeApprovedAt ? (
         <p className="mt-1 text-xs text-emerald-700">Approved: {new Date(chequeApprovedAt).toLocaleString()}</p>
+      ) : null}
+      {chequeReceivedAt ? (
+        <p className="mt-1 text-xs text-muted-foreground">Received (record): {new Date(chequeReceivedAt).toLocaleString()}</p>
       ) : null}
       {st === "marked_delivered" ? (
         <div className="mt-4">

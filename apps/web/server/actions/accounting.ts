@@ -1,29 +1,19 @@
 "use server";
 
-import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auditLog } from "@/server/audit/log";
+import { allocateReceiptNo } from "@/server/accounting/receipt-no";
 import {
   hasExpenseFinancialLink,
   hasReceiptFinancialLink,
   validateAccountingLinks
 } from "@/server/accounting/validate-accounting-links";
 import { guardActionRoles } from "@/server/auth/action-guard";
+import { syncManagementCommissionForRentReceipt } from "@/server/finance/owner-contract-automation";
 import { syncInvoicePaymentStatus } from "@/server/queries/accounting";
 
 export type AccountingActionResult = { ok: true } | { ok: false; error: string };
-
-async function uniqueReceiptNo(): Promise<string> {
-  for (let i = 0; i < 10; i += 1) {
-    const candidate = `RC-${randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
-    const clash = await prisma.receipt.findUnique({ where: { receiptNo: candidate }, select: { id: true } });
-    if (!clash) {
-      return candidate;
-    }
-  }
-  throw new Error("Could not allocate receipt number");
-}
 
 export async function createAccountingReceipt(input: {
   amount: string;
@@ -34,6 +24,7 @@ export async function createAccountingReceipt(input: {
   ticketId?: string;
   invoiceId?: string;
   leaseCheckoutId?: string;
+  ownerContractId?: string;
   category?: string;
   subcategory?: string;
   paymentStatus?: string;
@@ -52,7 +43,6 @@ export async function createAccountingReceipt(input: {
     return { ok: false, error: "missing_method" };
   }
 
-  const receiptNo = await uniqueReceiptNo();
   const ps = (input.paymentStatus ?? "recorded").trim().toLowerCase();
 
   if (
@@ -60,7 +50,8 @@ export async function createAccountingReceipt(input: {
       leaseId: input.leaseId,
       ticketId: input.ticketId,
       invoiceId: input.invoiceId,
-      leaseCheckoutId: input.leaseCheckoutId
+      leaseCheckoutId: input.leaseCheckoutId,
+      ownerContractId: input.ownerContractId
     })
   ) {
     return { ok: false, error: "missing_financial_link" };
@@ -70,29 +61,36 @@ export async function createAccountingReceipt(input: {
     leaseId: input.leaseId,
     ticketId: input.ticketId,
     invoiceId: input.invoiceId,
-    leaseCheckoutId: input.leaseCheckoutId
+    leaseCheckoutId: input.leaseCheckoutId,
+    ownerContractId: input.ownerContractId
   });
   if (!linkCheck.ok) {
     return { ok: false, error: linkCheck.error };
   }
 
-  const created = await prisma.receipt.create({
-    data: {
-      receiptNo,
-      amount,
-      method,
-      referenceNo: input.referenceNo?.trim() || null,
-      notes: input.notes?.trim() || null,
-      leaseId: input.leaseId?.trim() || null,
-      ticketId: input.ticketId?.trim() || null,
-      invoiceId: input.invoiceId?.trim() || null,
-      leaseCheckoutId: input.leaseCheckoutId?.trim() || null,
-      category: input.category?.trim() || null,
-      subcategory: input.subcategory?.trim() || null,
-      paymentStatus: ps,
-      recordedByUserId: guard.userId
-    },
-    select: { id: true }
+  const created = await prisma.$transaction(async (tx) => {
+    const receiptNo = await allocateReceiptNo(tx);
+    const row = await tx.receipt.create({
+      data: {
+        receiptNo,
+        amount,
+        method,
+        referenceNo: input.referenceNo?.trim() || null,
+        notes: input.notes?.trim() || null,
+        leaseId: input.leaseId?.trim() || null,
+        ticketId: input.ticketId?.trim() || null,
+        invoiceId: input.invoiceId?.trim() || null,
+        leaseCheckoutId: input.leaseCheckoutId?.trim() || null,
+        ownerContractId: input.ownerContractId?.trim() || null,
+        category: input.category?.trim() || null,
+        subcategory: input.subcategory?.trim() || null,
+        paymentStatus: ps,
+        recordedByUserId: guard.userId
+      },
+      select: { id: true }
+    });
+    await syncManagementCommissionForRentReceipt(tx, row.id);
+    return row;
   });
 
   auditLog({
@@ -124,6 +122,7 @@ export async function createAccountingExpense(input: {
   ticketId?: string;
   jobId?: string;
   leaseCheckoutId?: string;
+  ownerContractId?: string;
   paymentStatus?: string;
 }): Promise<AccountingActionResult> {
   const guard = await guardActionRoles(["admin", "super_admin"]);
@@ -153,7 +152,8 @@ export async function createAccountingExpense(input: {
       leaseId: input.leaseId,
       ticketId: input.ticketId,
       jobId: input.jobId,
-      leaseCheckoutId: input.leaseCheckoutId
+      leaseCheckoutId: input.leaseCheckoutId,
+      ownerContractId: input.ownerContractId
     })
   ) {
     return { ok: false, error: "missing_financial_link" };
@@ -165,7 +165,8 @@ export async function createAccountingExpense(input: {
     leaseId: input.leaseId,
     ticketId: input.ticketId,
     jobId: input.jobId,
-    leaseCheckoutId: input.leaseCheckoutId
+    leaseCheckoutId: input.leaseCheckoutId,
+    ownerContractId: input.ownerContractId
   });
   if (!linkCheck.ok) {
     return { ok: false, error: linkCheck.error };
@@ -185,6 +186,7 @@ export async function createAccountingExpense(input: {
       ticketId: input.ticketId?.trim() || null,
       jobId: input.jobId?.trim() || null,
       leaseCheckoutId: input.leaseCheckoutId?.trim() || null,
+      ownerContractId: input.ownerContractId?.trim() || null,
       paymentStatus: ps
     },
     select: { id: true }
@@ -321,7 +323,10 @@ export async function updateExpensePaymentStatus(input: {
   }
 
   const next = input.paymentStatus.trim().toLowerCase();
-  const expenseRow = await prisma.expense.findFirst({ where: { id: input.expenseId }, select: { id: true } });
+  const expenseRow = await prisma.expense.findFirst({
+    where: { id: input.expenseId },
+    select: { id: true, ownerContract: { select: { ownerUserId: true } } }
+  });
   if (!expenseRow) {
     return { ok: false, error: "not_found" };
   }
@@ -342,6 +347,10 @@ export async function updateExpensePaymentStatus(input: {
   revalidatePath("/admin/expenses");
   revalidatePath("/admin/reports");
   revalidatePath("/admin/finance");
+  if (expenseRow.ownerContract?.ownerUserId) {
+    revalidatePath(`/admin/owners/${expenseRow.ownerContract.ownerUserId}`);
+  }
+  revalidatePath("/owner/financials");
   return { ok: true };
 }
 

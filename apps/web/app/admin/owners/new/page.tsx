@@ -1,13 +1,9 @@
 import Link from "next/link";
 import { AdminOwnerForm } from "@/components/admin/admin-owner-form";
-import { listPropertiesForSelect } from "@/server/queries/admin-entities";
+import { listBuildingsWithUnitsForOwnerForm } from "@/server/queries/admin-entities";
 
 export default async function AdminNewOwnerPage() {
-  const properties = await listPropertiesForSelect();
-  const propertyOptions = properties.map((p) => ({
-    id: p.id,
-    label: `${p.code} · ${p.name}`
-  }));
+  const buildings = await listBuildingsWithUnitsForOwnerForm();
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
@@ -16,8 +12,14 @@ export default async function AdminNewOwnerPage() {
           ← Owners
         </Link>
       </p>
-      <h1 className="text-2xl font-semibold tracking-tight">New owner account</h1>
-      <AdminOwnerForm propertyOptions={propertyOptions} />
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Create owner &amp; agreement</h1>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+          Every new owner must have identification and a first owner agreement on file, including a contract
+          attachment.
+        </p>
+      </div>
+      <AdminOwnerForm buildings={buildings} />
     </div>
   );
 }

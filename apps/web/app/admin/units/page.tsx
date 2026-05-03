@@ -14,7 +14,9 @@ export default async function AdminUnitsPage() {
             </Link>
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Units</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Units belong to a building; optional direct unit owner overrides building-level owner.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Units belong to a building; optional direct unit owner overrides building-level owner.
+          </p>
         </div>
         <Link
           href="/admin/units/new"
@@ -27,32 +29,47 @@ export default async function AdminUnitsPage() {
       {units.length === 0 ? (
         <p className="text-sm text-muted-foreground">No units yet.</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="border-b bg-muted/50 text-xs uppercase text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3 font-medium">Building</th>
-                <th className="px-4 py-3 font-medium">Unit</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {units.map((u) => (
-                <tr key={u.id} className="hover:bg-muted/30">
-                  <td className="px-4 py-3">{u.property.name}</td>
-                  <td className="px-4 py-3 font-medium">{u.unitNumber}</td>
-                  <td className="px-4 py-3">{u.status}</td>
-                  <td className="px-4 py-3">
-                    <Link href={`/admin/units/${u.id}`} className="text-primary hover:underline">
-                      Edit
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {units.map((u) => (
+            <li key={u.id}>
+              <Link
+                href={`/admin/units/${u.id}`}
+                className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-colors hover:border-primary/40"
+              >
+                <div className="relative aspect-[16/10] bg-muted">
+                  {u.listingCoverImageUrl?.trim() ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- admin URLs + local uploads
+                    <img
+                      src={u.listingCoverImageUrl.trim()}
+                      alt=""
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                      No cover image
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-1 flex-col gap-1 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {u.property.code} · {u.property.name}
+                  </p>
+                  <p className="text-lg font-semibold tracking-tight">Unit {u.unitNumber}</p>
+                  {u.listingTitle?.trim() ? (
+                    <p className="line-clamp-2 text-sm text-muted-foreground">{u.listingTitle.trim()}</p>
+                  ) : null}
+                  <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2 text-xs">
+                    <span className="rounded-full bg-secondary px-2 py-0.5 font-medium text-secondary-foreground">
+                      {u.status}
+                    </span>
+                    <span className="font-medium text-primary">Open →</span>
+                  </div>
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

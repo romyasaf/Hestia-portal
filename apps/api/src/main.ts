@@ -32,10 +32,35 @@ interface PropertyItem {
   id: string;
   code: string;
   name: string;
-  addressLine1: string;
+  addressZone: string;
+  addressStreet: string;
+  addressBuildingNumber: string;
+  addressAreaName: string | null;
+  addressNotes: string | null;
   city: string;
   country: string;
+  formattedAddress: string;
   ownerUserId: string | null;
+}
+
+function formatPropertyAddress(row: {
+  address_zone: string;
+  address_street: string;
+  address_building_number: string;
+  city: string;
+  address_area_name: string | null;
+}): string {
+  const z = String(row.address_zone).trim();
+  const s = String(row.address_street).trim();
+  const b = String(row.address_building_number).trim();
+  const city = String(row.city).trim();
+  const area = row.address_area_name?.trim();
+  let line = `Zone ${z}, Street ${s}, Building ${b}`;
+  if (area) {
+    line += `, ${area}`;
+  }
+  line += ` – ${city}`;
+  return line;
 }
 
 interface UnitItem {
@@ -308,12 +333,19 @@ app.get("/properties", authMiddleware, async (_req, res) => {
       id: string;
       code: string;
       name: string;
-      address_line_1: string;
+      address_zone: string;
+      address_street: string;
+      address_building_number: string;
+      address_area_name: string | null;
+      address_notes: string | null;
       city: string;
       country: string;
       owner_user_id: string | null;
     }>(
-      `SELECT id, code, name, address_line_1, city, country, owner_user_id
+      `SELECT id, code, name,
+              address_zone, address_street, address_building_number,
+              address_area_name, address_notes,
+              city, country, owner_user_id
        FROM properties
        ORDER BY created_at DESC`
     );
@@ -322,9 +354,14 @@ app.get("/properties", authMiddleware, async (_req, res) => {
       id: row.id,
       code: row.code,
       name: row.name,
-      addressLine1: row.address_line_1,
+      addressZone: row.address_zone,
+      addressStreet: row.address_street,
+      addressBuildingNumber: row.address_building_number,
+      addressAreaName: row.address_area_name,
+      addressNotes: row.address_notes,
       city: row.city,
       country: row.country,
+      formattedAddress: formatPropertyAddress(row),
       ownerUserId: row.owner_user_id
     }));
 
@@ -336,50 +373,78 @@ app.get("/properties", authMiddleware, async (_req, res) => {
 });
 
 app.post("/properties", authMiddleware, requireAdmin, async (req, res) => {
-  const { code, name, addressLine1, city, country, ownerUserId } = req.body as {
+  const body = req.body as {
     code?: string;
     name?: string;
-    addressLine1?: string;
+    addressZone?: string;
+    addressStreet?: string;
+    addressBuildingNumber?: string;
+    addressAreaName?: string | null;
+    addressNotes?: string | null;
     city?: string;
     country?: string;
     ownerUserId?: string | null;
   };
 
-  if (!code || !name || !addressLine1 || !city) {
-    return res.status(400).json({ message: "code, name, addressLine1, and city are required." });
+  const code = body.code?.trim();
+  const name = body.name?.trim();
+  const addressZone = body.addressZone?.trim();
+  const addressStreet = body.addressStreet?.trim();
+  const addressBuildingNumber = body.addressBuildingNumber?.trim();
+  const city = body.city?.trim();
+  if (!code || !name || !addressZone || !addressStreet || !addressBuildingNumber || !city) {
+    return res.status(400).json({
+      message: "code, name, addressZone, addressStreet, addressBuildingNumber, and city are required."
+    });
   }
+
+  const country = (body.country ?? "Qatar").trim();
+  const area = body.addressAreaName?.trim() || null;
+  const notes = body.addressNotes?.trim() || null;
+  const ownerUserId = body.ownerUserId ?? null;
 
   try {
     const inserted = await db.query<{
       id: string;
       code: string;
       name: string;
-      address_line_1: string;
+      address_zone: string;
+      address_street: string;
+      address_building_number: string;
+      address_area_name: string | null;
+      address_notes: string | null;
       city: string;
       country: string;
       owner_user_id: string | null;
     }>(
-      `INSERT INTO properties (code, name, address_line_1, city, country, owner_user_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, code, name, address_line_1, city, country, owner_user_id`,
-      [
-        code.trim().toUpperCase(),
-        name.trim(),
-        addressLine1.trim(),
-        city.trim(),
-        (country ?? "Qatar").trim(),
-        ownerUserId ?? null
-      ]
+      `INSERT INTO properties (
+         code, name,
+         address_zone, address_street, address_building_number,
+         address_area_name, address_notes,
+         city, country, owner_user_id
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id, code, name,
+         address_zone, address_street, address_building_number,
+         address_area_name, address_notes,
+         city, country, owner_user_id`,
+      [code.toUpperCase(), name, addressZone, addressStreet, addressBuildingNumber, area, notes, city, country, ownerUserId]
     );
 
+    const row = inserted.rows[0];
     return res.status(201).json({
-      id: inserted.rows[0].id,
-      code: inserted.rows[0].code,
-      name: inserted.rows[0].name,
-      addressLine1: inserted.rows[0].address_line_1,
-      city: inserted.rows[0].city,
-      country: inserted.rows[0].country,
-      ownerUserId: inserted.rows[0].owner_user_id
+      id: row.id,
+      code: row.code,
+      name: row.name,
+      addressZone: row.address_zone,
+      addressStreet: row.address_street,
+      addressBuildingNumber: row.address_building_number,
+      addressAreaName: row.address_area_name,
+      addressNotes: row.address_notes,
+      city: row.city,
+      country: row.country,
+      formattedAddress: formatPropertyAddress(row),
+      ownerUserId: row.owner_user_id
     });
   } catch (error) {
     console.error("Create property error:", error);

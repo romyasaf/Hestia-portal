@@ -1,3 +1,4 @@
+import { leaseNestedForUnitProperty } from "@/lib/prisma/lease-nested-label-select";
 import { prisma } from "@/lib/prisma";
 
 export type AccountingLinkInput = {
@@ -8,19 +9,21 @@ export type AccountingLinkInput = {
   invoiceId?: string | null;
   leaseCheckoutId?: string | null;
   jobId?: string | null;
+  ownerContractId?: string | null;
 };
 
-/** Receipts must anchor to operational context (lease, ticket, invoice, or checkout). */
+/** Receipts must anchor to operational context (lease, ticket, invoice, checkout, or owner contract). */
 export function hasReceiptFinancialLink(input: AccountingLinkInput): boolean {
   return Boolean(
     input.leaseId?.trim() ||
       input.ticketId?.trim() ||
       input.invoiceId?.trim() ||
-      input.leaseCheckoutId?.trim()
+      input.leaseCheckoutId?.trim() ||
+      input.ownerContractId?.trim()
   );
 }
 
-/** Expenses must tie to property, unit, lease, ticket, job, or checkout (property-only = categorized opex). */
+/** Expenses must tie to property, unit, lease, ticket, job, checkout, or owner contract. */
 export function hasExpenseFinancialLink(input: AccountingLinkInput): boolean {
   return Boolean(
     input.propertyId?.trim() ||
@@ -28,7 +31,8 @@ export function hasExpenseFinancialLink(input: AccountingLinkInput): boolean {
       input.leaseId?.trim() ||
       input.ticketId?.trim() ||
       input.jobId?.trim() ||
-      input.leaseCheckoutId?.trim()
+      input.leaseCheckoutId?.trim() ||
+      input.ownerContractId?.trim()
   );
 }
 
@@ -66,7 +70,7 @@ export async function validateAccountingLinks(input: AccountingLinkInput): Promi
   if (input.leaseId?.trim()) {
     const lease = await prisma.lease.findUnique({
       where: { id: input.leaseId.trim() },
-      include: { unit: { select: { propertyId: true } } }
+      select: leaseNestedForUnitProperty
     });
     if (!lease) {
       return { ok: false, error: "invalid_lease" };
@@ -95,7 +99,7 @@ export async function validateAccountingLinks(input: AccountingLinkInput): Promi
     const inv = await prisma.invoice.findUnique({
       where: { id: input.invoiceId.trim() },
       include: {
-        lease: { include: { unit: { select: { propertyId: true } } } }
+        lease: { select: leaseNestedForUnitProperty }
       }
     });
     if (!inv) {
@@ -113,7 +117,7 @@ export async function validateAccountingLinks(input: AccountingLinkInput): Promi
     const co = await prisma.leaseCheckOut.findUnique({
       where: { id: input.leaseCheckoutId.trim() },
       include: {
-        lease: { include: { unit: { select: { propertyId: true } } } }
+        lease: { select: leaseNestedForUnitProperty }
       }
     });
     if (!co) {
@@ -142,10 +146,32 @@ export async function validateAccountingLinks(input: AccountingLinkInput): Promi
     if (input.leaseId?.trim() && j.propertyId) {
       const leaseForJob = await prisma.lease.findUnique({
         where: { id: input.leaseId.trim() },
-        include: { unit: { select: { propertyId: true } } }
+        select: leaseNestedForUnitProperty
       });
       if (leaseForJob && leaseForJob.unit.propertyId !== j.propertyId) {
         return { ok: false, error: "job_lease_property_mismatch" };
+      }
+    }
+  }
+
+  if (input.ownerContractId?.trim()) {
+    const oc = await prisma.ownerContract.findUnique({
+      where: { id: input.ownerContractId.trim() },
+      select: { propertyId: true, unitId: true }
+    });
+    if (!oc) {
+      return { ok: false, error: "invalid_owner_contract" };
+    }
+    if (oc.propertyId) {
+      addPid(oc.propertyId);
+    }
+    if (oc.unitId) {
+      const u = await prisma.unit.findUnique({
+        where: { id: oc.unitId },
+        select: { propertyId: true }
+      });
+      if (u) {
+        addPid(u.propertyId);
       }
     }
   }

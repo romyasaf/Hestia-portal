@@ -31,12 +31,16 @@ export async function approveLeaseChequeDelivery(input: { leaseId: string }): Pr
   if (st !== "marked_delivered") {
     return { ok: false, error: "not_awaiting_approval" };
   }
+  const now = new Date();
   await prisma.lease.update({
     where: { id },
     data: {
       chequeDeliveryState: "approved",
-      chequeApprovedAt: new Date(),
-      chequeApprovedByUserId: guard.userId
+      chequeApprovedAt: now,
+      chequeApprovedByUserId: guard.userId,
+      chequeReceivedAt: now,
+      chequeReceivedByUserId: guard.userId,
+      onboardingChequeReceived: true
     }
   });
   auditLog({

@@ -17,7 +17,7 @@ export function buildLeaseContractBody(input: {
     `Email: ${tenantEmail}`,
     "",
     `Property: ${b.name} (${b.code})`,
-    `Address: ${b.addressLine1}, ${b.city}, ${b.country}`,
+    `Address: ${b.formattedAddress}, ${b.country}`,
     `Unit: ${lease.unit.unitNumber}`,
     "",
     `Lease term: ${lease.startDate} → ${lease.endDate}`,

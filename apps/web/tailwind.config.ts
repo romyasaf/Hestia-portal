@@ -44,7 +44,17 @@ const config: Config = {
         },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))"
+        ring: "hsl(var(--ring))",
+        brand: {
+          surface: {
+            DEFAULT: "hsl(var(--brand-surface))",
+            foreground: "hsl(var(--brand-surface-foreground))",
+            muted: "hsl(var(--brand-surface-muted))",
+            border: "hsl(var(--brand-surface-border))"
+          },
+          cyan: "hsl(var(--brand-cyan))",
+          purple: "hsl(var(--brand-purple))"
+        }
       }
     }
   },

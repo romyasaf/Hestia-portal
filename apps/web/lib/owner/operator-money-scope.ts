@@ -1,8 +1,9 @@
 import type { Prisma } from "@prisma/client";
 
 /**
- * Financial visibility for **operator** (fixed-lease) building owners:
- * building-level expenses and company payments not routed through tenant leases.
+ * Legacy scope helper for operator buildings (building-level expenses without tenant lease).
+ * Owner portal KPIs now use **owner contracts** (`owner_payment` + `OwnerContract`) instead; see
+ * `getOwnerFinancialSummary` in `server/queries/owner-portal.ts`. Kept for ad-hoc reporting if needed.
  */
 export function ownerOperatorMoneyClauses(propertyIds: string[]): {
   receipt: Prisma.ReceiptWhereInput;

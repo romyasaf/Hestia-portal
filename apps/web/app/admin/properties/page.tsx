@@ -40,7 +40,13 @@ export default async function AdminPropertiesPortalPage() {
               <p className="font-medium">
                 {p.code} · {p.name}
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-foreground">{p.formattedAddress}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                <Link href={`/admin/properties/${p.id}/edit`} className="font-medium text-primary hover:underline">
+                  Edit building & address
+                </Link>
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
                 Building-level owner:{" "}
                 {p.owner ? (
                   <>

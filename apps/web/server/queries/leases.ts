@@ -1,3 +1,4 @@
+import { formatBuildingAddressLine } from "@/lib/portfolio/building-address";
 import { leaseStatusActiveWhere } from "@/lib/leases/status";
 import { prisma } from "@/lib/prisma";
 
@@ -26,7 +27,7 @@ export type ActiveLeaseForTenant = {
     id: string;
     code: string;
     name: string;
-    addressLine1: string;
+    formattedAddress: string;
     city: string;
     country: string;
   };
@@ -38,6 +39,8 @@ export type ActiveLeaseForTenant = {
   chequeMarkedDeliveredAt: string | null;
   chequeApprovedAt: string | null;
   onboardingCompletedAt: string | null;
+  /** True after move-in check-in has been submitted (onboarding path). */
+  onboardingCheckinCompleted: boolean;
 };
 
 function decimalToString(value: { toString(): string } | null | undefined): string {
@@ -62,6 +65,7 @@ type LeaseWithUnitProp = {
   chequeMarkedDeliveredAt: Date | null;
   chequeApprovedAt: Date | null;
   onboardingCompletedAt: Date | null;
+  onboardingCheckinCompleted: boolean;
   unit: {
     id: string;
     unitNumber: string;
@@ -72,7 +76,11 @@ type LeaseWithUnitProp = {
       id: string;
       code: string;
       name: string;
-      addressLine1: string;
+      addressZone: string;
+      addressStreet: string;
+      addressBuildingNumber: string;
+      addressAreaName: string | null;
+      addressNotes: string | null;
       city: string;
       country: string;
     };
@@ -100,7 +108,7 @@ function mapLeaseRow(row: LeaseWithUnitProp): ActiveLeaseForTenant {
       id: building.id,
       code: building.code,
       name: building.name,
-      addressLine1: building.addressLine1,
+      formattedAddress: formatBuildingAddressLine(building),
       city: building.city,
       country: building.country
     },
@@ -111,7 +119,8 @@ function mapLeaseRow(row: LeaseWithUnitProp): ActiveLeaseForTenant {
     chequeAppointmentNotes: row.chequeAppointmentNotes,
     chequeMarkedDeliveredAt: row.chequeMarkedDeliveredAt?.toISOString() ?? null,
     chequeApprovedAt: row.chequeApprovedAt?.toISOString() ?? null,
-    onboardingCompletedAt: row.onboardingCompletedAt?.toISOString() ?? null
+    onboardingCompletedAt: row.onboardingCompletedAt?.toISOString() ?? null,
+    onboardingCheckinCompleted: row.onboardingCheckinCompleted
   };
 }
 
@@ -130,6 +139,7 @@ const leaseOnboardingSelect = {
   chequeMarkedDeliveredAt: true,
   chequeApprovedAt: true,
   onboardingCompletedAt: true,
+  onboardingCheckinCompleted: true,
   unit: {
     select: {
       id: true,
@@ -142,7 +152,11 @@ const leaseOnboardingSelect = {
           id: true,
           code: true,
           name: true,
-          addressLine1: true,
+          addressZone: true,
+          addressStreet: true,
+          addressBuildingNumber: true,
+          addressAreaName: true,
+          addressNotes: true,
           city: true,
           country: true
         }

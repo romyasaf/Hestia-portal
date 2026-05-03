@@ -34,7 +34,10 @@ export default function App() {
   const [assetsError, setAssetsError] = useState("");
   const [propertyCode, setPropertyCode] = useState("");
   const [propertyName, setPropertyName] = useState("");
-  const [propertyAddress, setPropertyAddress] = useState("");
+  const [propertyZone, setPropertyZone] = useState("");
+  const [propertyStreet, setPropertyStreet] = useState("");
+  const [propertyBuildingNumber, setPropertyBuildingNumber] = useState("");
+  const [propertyAreaName, setPropertyAreaName] = useState("");
   const [propertyCity, setPropertyCity] = useState("Doha");
   const [creatingProperty, setCreatingProperty] = useState(false);
   const [unitPropertyId, setUnitPropertyId] = useState("");
@@ -173,8 +176,8 @@ export default function App() {
     if (!session?.accessToken) {
       return;
     }
-    if (!propertyCode || !propertyName || !propertyAddress || !propertyCity) {
-      setAssetsError("Fill property code, name, address, and city.");
+    if (!propertyCode || !propertyName || !propertyZone || !propertyStreet || !propertyBuildingNumber || !propertyCity) {
+      setAssetsError("Fill property code, name, zone, street, building number, and city.");
       return;
     }
 
@@ -190,7 +193,10 @@ export default function App() {
         body: JSON.stringify({
           code: propertyCode,
           name: propertyName,
-          addressLine1: propertyAddress,
+          addressZone: propertyZone,
+          addressStreet: propertyStreet,
+          addressBuildingNumber: propertyBuildingNumber,
+          addressAreaName: propertyAreaName.trim() || undefined,
           city: propertyCity,
           country: "Qatar"
         })
@@ -202,7 +208,10 @@ export default function App() {
 
       setPropertyCode("");
       setPropertyName("");
-      setPropertyAddress("");
+      setPropertyZone("");
+      setPropertyStreet("");
+      setPropertyBuildingNumber("");
+      setPropertyAreaName("");
       await loadAssets(session.accessToken);
     } catch (err) {
       setAssetsError(err instanceof Error ? err.message : "Unexpected error");
@@ -505,8 +514,18 @@ export default function App() {
                   <TextInput style={styles.input} value={propertyCode} onChangeText={setPropertyCode} />
                   <Text style={styles.label}>Name</Text>
                   <TextInput style={styles.input} value={propertyName} onChangeText={setPropertyName} />
-                  <Text style={styles.label}>Address</Text>
-                  <TextInput style={styles.input} value={propertyAddress} onChangeText={setPropertyAddress} />
+                  <Text style={styles.label}>Zone</Text>
+                  <TextInput style={styles.input} value={propertyZone} onChangeText={setPropertyZone} />
+                  <Text style={styles.label}>Street</Text>
+                  <TextInput style={styles.input} value={propertyStreet} onChangeText={setPropertyStreet} />
+                  <Text style={styles.label}>Building number</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={propertyBuildingNumber}
+                    onChangeText={setPropertyBuildingNumber}
+                  />
+                  <Text style={styles.label}>Area (optional)</Text>
+                  <TextInput style={styles.input} value={propertyAreaName} onChangeText={setPropertyAreaName} />
                   <Text style={styles.label}>City</Text>
                   <TextInput style={styles.input} value={propertyCity} onChangeText={setPropertyCity} />
                   <TouchableOpacity style={styles.button} onPress={createProperty} disabled={creatingProperty}>
@@ -587,7 +606,7 @@ export default function App() {
                         </Text>
                         <Text style={styles.userMeta}>{item.id}</Text>
                         <Text style={styles.userMeta}>
-                          {item.city}, {item.country}
+                          {item.formattedAddress ? `${item.formattedAddress}, ${item.country}` : `${item.city}, ${item.country}`}
                         </Text>
                       </View>
                     ))}

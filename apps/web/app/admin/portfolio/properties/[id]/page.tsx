@@ -24,6 +24,15 @@ export default async function PortfolioPropertyDetailPage({ params }: Props) {
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
             {detail.code} · {detail.name}
           </h1>
+          <p className="mt-3 max-w-3xl text-sm text-muted-foreground">{detail.formattedAddress}</p>
+          <p className="mt-2">
+            <Link
+              href={`/admin/properties/${detail.id}/edit`}
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              Edit building & address
+            </Link>
+          </p>
           <div className="mt-6 flex flex-wrap items-center gap-6 rounded-2xl border border-border/80 bg-card/70 px-5 py-4">
             <div>
               <p className="text-xs font-medium text-muted-foreground">Building-level owner</p>
@@ -51,7 +60,7 @@ export default async function PortfolioPropertyDetailPage({ params }: Props) {
         <section className="py-10">
           <h2 className="text-lg font-semibold tracking-tight text-foreground">Units & occupancy</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Each row links to the operational unit record. Active lease reflects calendar-active status today (UTC).
+            Links open the portfolio unit summary. Active lease reflects calendar-active status today (UTC).
           </p>
           <div className="mt-6 overflow-hidden rounded-2xl border border-border/80 bg-card/80 shadow-sm">
             <table className="w-full min-w-[720px] text-left text-sm">
@@ -114,9 +123,12 @@ export default async function PortfolioPropertyDetailPage({ params }: Props) {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <div className="flex flex-wrap justify-end gap-x-3 text-xs">
-                          <Link href={`/admin/units/${u.id}`} className="font-medium text-primary hover:underline">
-                            Unit
+                        <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 text-xs">
+                          <Link href={`/admin/portfolio/units/${u.id}`} className="font-medium text-primary hover:underline">
+                            View
+                          </Link>
+                          <Link href={`/admin/units/${u.id}?section=overview`} className="font-medium text-primary/90 hover:underline">
+                            Edit
                           </Link>
                           {u.activeLease ? (
                             <Link href={`/admin/leases/${u.activeLease.id}`} className="font-medium text-primary hover:underline">

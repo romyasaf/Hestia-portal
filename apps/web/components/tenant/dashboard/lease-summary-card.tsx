@@ -23,7 +23,7 @@ export function LeaseSummaryCard({ lease, className }: Props) {
           <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Building</dt>
           <dd className="mt-1 font-medium text-foreground">{lease.building.name}</dd>
           <dd className="text-muted-foreground">
-            {lease.building.code} · {lease.building.addressLine1}, {lease.building.city}
+            {lease.building.code} · {lease.building.formattedAddress}
           </dd>
         </div>
         <div>

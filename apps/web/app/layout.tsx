@@ -5,7 +5,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Hestia Portal",
-  description: "Hestia Real Estate Development — property and tenant operations"
+  description: "Hestia Real Estate Development — property and tenant operations",
+  icons: {
+    icon: [{ url: "/brand/hestia-icon.png", type: "image/png" }],
+    apple: "/brand/hestia-icon.png"
+  }
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

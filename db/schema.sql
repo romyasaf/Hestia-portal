@@ -20,6 +20,48 @@ CREATE TABLE users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE owner_profiles (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  owner_type TEXT NOT NULL DEFAULT 'individual' CHECK (owner_type IN ('individual', 'company')),
+  ownership_scope TEXT NOT NULL DEFAULT 'building_owner' CHECK (ownership_scope IN ('building_owner', 'unit_owner')),
+  whats_app_phone TEXT,
+  address_line TEXT,
+  notes TEXT,
+  qid_number TEXT,
+  qid_expiry DATE,
+  qid_photo_url TEXT,
+  commercial_registration_number TEXT,
+  cr_document_url TEXT,
+  default_owner_contract_type TEXT NOT NULL DEFAULT 'managed' CHECK (default_owner_contract_type IN ('operator', 'managed')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE tenant_profiles (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  tenant_type TEXT NOT NULL DEFAULT 'individual' CHECK (tenant_type IN ('individual', 'company')),
+  tenant_lifecycle_status TEXT NOT NULL DEFAULT 'active' CHECK (tenant_lifecycle_status IN ('active', 'previous', 'lead_pending')),
+  whats_app_phone TEXT,
+  nationality TEXT,
+  qid_number TEXT,
+  qid_expiry DATE,
+  qid_photo_url TEXT,
+  passport_number TEXT,
+  passport_photo_url TEXT,
+  date_of_birth DATE,
+  company_name TEXT,
+  contact_person_name TEXT,
+  commercial_registration_number TEXT,
+  cr_document_url TEXT,
+  company_address TEXT,
+  authorized_signatory TEXT,
+  emergency_contact_name TEXT,
+  emergency_contact_phone TEXT,
+  emergency_contact_relationship TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE user_roles (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
@@ -39,13 +81,31 @@ CREATE TABLE properties (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   code TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
-  address_line_1 TEXT NOT NULL,
+  address_zone TEXT NOT NULL,
+  address_street TEXT NOT NULL,
+  address_building_number TEXT NOT NULL,
+  address_area_name TEXT,
+  address_notes TEXT,
   city TEXT NOT NULL,
   country TEXT NOT NULL DEFAULT 'Qatar',
   owner_user_id UUID REFERENCES users(id),
   owner_financial_access BOOLEAN NOT NULL DEFAULT false,
   owner_contract_type TEXT NOT NULL DEFAULT 'managed' CHECK (owner_contract_type IN ('operator', 'managed')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  property_type TEXT NOT NULL DEFAULT 'apartment_building' CHECK (
+    property_type IN (
+      'apartment_building',
+      'villa',
+      'compound',
+      'commercial_building',
+      'mixed_use'
+    )
+  ),
+  management_status TEXT NOT NULL DEFAULT 'managed_by_hestia' CHECK (
+    management_status IN ('managed_by_hestia', 'location_only_not_managed')
+  ),
+  google_maps_url TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE units (
@@ -54,10 +114,18 @@ CREATE TABLE units (
   owner_user_id UUID REFERENCES users(id),
   unit_number TEXT NOT NULL,
   unit_type TEXT,
+  floor TEXT,
   bedrooms INT,
   bathrooms INT,
   monthly_rent NUMERIC(12,2),
   status TEXT NOT NULL DEFAULT 'available',
+  ownership_source TEXT NOT NULL DEFAULT 'no_owner_contract' CHECK (
+    ownership_source IN (
+      'inherited_from_building_contract',
+      'direct_unit_owner_contract',
+      'no_owner_contract'
+    )
+  ),
   listing_title TEXT,
   listing_description TEXT,
   listing_monthly_price NUMERIC(12,2),
@@ -65,8 +133,50 @@ CREATE TABLE units (
   listing_cover_image_url TEXT,
   listing_gallery_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
   checkin_inventory_template JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(property_id, unit_number)
 );
+
+CREATE TABLE unit_inventory_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  unit_id UUID NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+  item_name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  quantity NUMERIC(12,2) NOT NULL DEFAULT 1,
+  condition_label TEXT NOT NULL DEFAULT 'good',
+  notes TEXT,
+  photo_url TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_unit_inventory_items_unit ON unit_inventory_items(unit_id);
+
+CREATE TABLE checkin_inventory_master_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sort_order INT NOT NULL DEFAULT 0,
+  item_name TEXT NOT NULL,
+  condition_hint TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX checkin_inventory_master_items_sort_idx
+  ON checkin_inventory_master_items (sort_order, id);
+
+INSERT INTO checkin_inventory_master_items (sort_order, item_name, condition_hint, notes)
+SELECT * FROM (VALUES
+  (0, 'General walls & paint', 'Document baseline', NULL::text),
+  (1, 'Flooring', 'Document baseline', NULL::text),
+  (2, 'Windows & balcony doors', 'Document baseline', NULL::text),
+  (3, 'Kitchen cabinets & counters', 'Document baseline', NULL::text),
+  (4, 'Bathroom fixtures', 'Document baseline', NULL::text),
+  (5, 'Lighting & power outlets', 'Document baseline', NULL::text),
+  (6, 'AC / ventilation grilles', 'Document baseline', NULL::text),
+  (7, 'Keys, remotes, access cards', 'Received as listed', NULL::text)
+) AS v(sort_order, item_name, condition_hint, notes)
+WHERE NOT EXISTS (SELECT 1 FROM checkin_inventory_master_items LIMIT 1);
 
 CREATE TABLE leases (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -85,6 +195,15 @@ CREATE TABLE leases (
   cheque_marked_delivered_at TIMESTAMPTZ,
   cheque_approved_at TIMESTAMPTZ,
   cheque_approved_by_user_id UUID REFERENCES users(id),
+  cheque_received_at TIMESTAMPTZ,
+  cheque_received_by_user_id UUID REFERENCES users(id),
+  payment_frequency TEXT NOT NULL DEFAULT 'monthly',
+  digital_signature_status TEXT NOT NULL DEFAULT 'none',
+  unsigned_contract_document_url TEXT,
+  signed_contract_document_url TEXT,
+  onboarding_contract_signed BOOLEAN NOT NULL DEFAULT false,
+  onboarding_cheque_received BOOLEAN NOT NULL DEFAULT false,
+  onboarding_checkin_completed BOOLEAN NOT NULL DEFAULT false,
   onboarding_completed_at TIMESTAMPTZ,
   onboarding_checkin_inventory JSONB NOT NULL DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -231,6 +350,52 @@ CREATE TABLE payments (
   reference_no TEXT
 );
 
+CREATE TABLE owner_contracts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  property_id UUID REFERENCES properties(id) ON DELETE SET NULL,
+  unit_id UUID REFERENCES units(id) ON DELETE SET NULL,
+  property_scope TEXT CHECK (
+    property_scope IS NULL
+    OR property_scope IN ('whole_building', 'specific_units', 'whole_villa')
+  ),
+  contract_type TEXT NOT NULL CHECK (contract_type IN ('operator', 'managed', 'fixed_lease', 'property_management')),
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  contract_status TEXT CHECK (
+    contract_status IS NULL OR contract_status IN ('upcoming', 'active', 'expired')
+  ),
+  payment_frequency TEXT NOT NULL DEFAULT 'monthly',
+  amount NUMERIC(12, 2) NOT NULL,
+  management_fee_structure TEXT
+    CHECK (
+      management_fee_structure IS NULL
+      OR management_fee_structure IN (
+        'commission_based_fee',
+        'fixed_monthly_management_fee',
+        'hybrid_fee_structure'
+      )
+    ),
+  management_fee_percentage NUMERIC(6, 3),
+  monthly_management_fee_amount NUMERIC(12, 2),
+  revenue_calculation_method TEXT
+    CHECK (
+      revenue_calculation_method IS NULL
+      OR revenue_calculation_method IN ('gross_revenue_basis', 'net_revenue_basis')
+    ),
+  applies_to_unit_ids JSONB,
+  document_url TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (property_id IS NOT NULL OR unit_id IS NOT NULL),
+  CHECK (end_date >= start_date)
+);
+
+CREATE INDEX owner_contracts_owner_user_id_idx ON owner_contracts (owner_user_id);
+CREATE INDEX owner_contracts_property_id_idx ON owner_contracts (property_id);
+CREATE INDEX owner_contracts_unit_id_idx ON owner_contracts (unit_id);
+
 CREATE TABLE expenses (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   property_id UUID REFERENCES properties(id),
@@ -239,6 +404,7 @@ CREATE TABLE expenses (
   ticket_id UUID REFERENCES tickets(id),
   job_id UUID REFERENCES jobs(id),
   lease_checkout_id UUID REFERENCES lease_checkouts(id) ON DELETE SET NULL,
+  owner_contract_id UUID REFERENCES owner_contracts(id) ON DELETE CASCADE,
   category TEXT NOT NULL,
   subcategory TEXT,
   amount NUMERIC(12,2) NOT NULL,
@@ -248,6 +414,8 @@ CREATE TABLE expenses (
   notes TEXT
 );
 
+CREATE INDEX expenses_owner_contract_id_idx ON expenses (owner_contract_id);
+
 CREATE TABLE receipts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   receipt_no TEXT UNIQUE NOT NULL,
@@ -255,6 +423,8 @@ CREATE TABLE receipts (
   ticket_id UUID REFERENCES tickets(id) ON DELETE SET NULL,
   invoice_id UUID REFERENCES invoices(id) ON DELETE SET NULL,
   lease_checkout_id UUID REFERENCES lease_checkouts(id) ON DELETE SET NULL,
+  owner_contract_id UUID REFERENCES owner_contracts(id) ON DELETE SET NULL,
+  source_receipt_id UUID REFERENCES receipts(id) ON DELETE CASCADE,
   category TEXT,
   subcategory TEXT,
   amount NUMERIC(12,2) NOT NULL,
@@ -272,6 +442,9 @@ CREATE INDEX idx_receipts_ticket_id ON receipts(ticket_id);
 CREATE INDEX idx_receipts_invoice_id ON receipts(invoice_id);
 CREATE INDEX idx_receipts_received_at ON receipts(received_at);
 CREATE INDEX idx_receipts_lease_checkout_id ON receipts(lease_checkout_id);
+CREATE INDEX idx_receipts_owner_contract_id ON receipts(owner_contract_id);
+CREATE UNIQUE INDEX receipts_commission_source_contract_uidx ON receipts (source_receipt_id, owner_contract_id)
+  WHERE source_receipt_id IS NOT NULL AND owner_contract_id IS NOT NULL;
 CREATE INDEX idx_expenses_lease_id ON expenses(lease_id);
 CREATE INDEX idx_expenses_payment_status ON expenses(payment_status);
 CREATE INDEX idx_expenses_lease_checkout_id ON expenses(lease_checkout_id);

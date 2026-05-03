@@ -5,25 +5,35 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Charcoal aligned to Hestia wordmark */
+    --foreground: 220 18% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 220 18% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --popover-foreground: 220 18% 12%;
+    /* Logo purple (tagline / icon top) — primary actions */
+    --primary: 277 62% 48%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 277 25% 96%;
+    --secondary-foreground: 277 35% 22%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 10% 42%;
+    --accent: 188 45% 95%;
+    --accent-foreground: 220 18% 12%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --border: 220 16% 90%;
+    --input: 220 16% 90%;
+    --ring: 277 62% 48%;
     --radius: 0.5rem;
+
+    /* Marketing / hero surfaces (charcoal) + logo gradient accents */
+    --brand-surface: 220 18% 11%;
+    --brand-surface-foreground: 210 25% 98%;
+    --brand-surface-muted: 218 12% 70%;
+    --brand-surface-border: 220 14% 20%;
+    --brand-cyan: 188 88% 46%;
+    --brand-purple: 277 58% 58%;
   }
 
   .dark {
@@ -33,8 +43,8 @@
     --card-foreground: 210 40% 98%;
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 277 58% 58%;
+    --primary-foreground: 220 18% 10%;
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
     --muted: 217.2 32.6% 17.5%;
@@ -45,7 +55,13 @@
     --destructive-foreground: 210 40% 98%;
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --ring: 277 58% 58%;
+    --brand-surface: 222 22% 8%;
+    --brand-surface-foreground: 210 25% 98%;
+    --brand-surface-muted: 218 12% 68%;
+    --brand-surface-border: 220 14% 18%;
+    --brand-cyan: 188 80% 50%;
+    --brand-purple: 277 55% 62%;
   }
 }
 
@@ -56,6 +72,31 @@
 
   body {
     @apply bg-background text-foreground antialiased;
+  }
+
+  /**
+   * React/Next portaled UI (modals, toasts, dev overlay) mounts in this custom element.
+   * Full-viewport host + pointer-events:none avoids a misleading 0×0 box; direct children
+   * re-enable interaction (modal roots, toasts) so the page underneath stays usable when idle.
+   */
+  nextjs-portal {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    width: 100%;
+    min-height: 100dvh;
+    max-width: 100vw;
+    max-height: none;
+    pointer-events: none;
+    box-sizing: border-box;
+  }
+
+  nextjs-portal:empty {
+    display: none;
+  }
+
+  nextjs-portal > * {
+    pointer-events: auto;
   }
 }
 

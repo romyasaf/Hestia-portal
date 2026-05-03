@@ -19,7 +19,7 @@ export default async function TenantMyUnitPage() {
           <div>
             <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Building</dt>
             <dd className="mt-1">{lease.building.name}</dd>
-            <dd className="mt-1 text-muted-foreground">{lease.building.addressLine1}</dd>
+            <dd className="mt-1 text-muted-foreground">{lease.building.formattedAddress}</dd>
             <dd className="mt-1 text-muted-foreground">
               {lease.building.city}, {lease.building.country}
             </dd>

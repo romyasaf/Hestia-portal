@@ -16,6 +16,7 @@ export function AdminUnitVisibilityPanel({
     listingCoverImageUrl: string | null;
     listingMonthlyPrice: Prisma.Decimal | null;
     monthlyRent: Prisma.Decimal | null;
+    listingGalleryUrls: Prisma.JsonValue | null;
     activeLease: ActiveLease | null;
   };
 }) {
@@ -29,7 +30,7 @@ export function AdminUnitVisibilityPanel({
       ok: Boolean(unit.listingMonthlyPrice ?? unit.monthlyRent),
       label: "Monthly price (listing or rent)"
     },
-    { ok: Boolean(unit.listingCoverImageUrl?.trim()), label: "Cover image URL" }
+    { ok: Boolean(unit.listingCoverImageUrl?.trim()), label: "Cover image" }
   ];
 
   return (
@@ -77,7 +78,7 @@ export function AdminUnitVisibilityPanel({
             ? "This unit appears automatically — no publish toggle."
             : unit.activeLease
               ? "Will appear automatically when the active lease ends (or becomes inactive) and listing fields stay complete."
-              : "Complete the listing tab (title, description, price, cover image) to go live."}
+              : "Complete the listing tab (title, description, price, cover) to go live."}
         </p>
       </div>
     </div>

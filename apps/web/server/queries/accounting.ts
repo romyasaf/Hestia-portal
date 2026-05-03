@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { leaseNestedForListLabel } from "@/lib/prisma/lease-nested-label-select";
 import { prisma } from "@/lib/prisma";
 import { getOperationalLeaseForTenant } from "@/server/queries/leases";
 
@@ -69,15 +70,16 @@ export async function listReceiptsForAdmin(take = 80): Promise<ReceiptListRow[]>
     orderBy: { receivedAt: "desc" },
     take,
     include: {
-      lease: {
-        include: { unit: true, tenant: { select: { fullName: true } } }
-      },
+      lease: { select: leaseNestedForListLabel },
       ticket: { select: { ticketNo: true, title: true } },
       invoice: { select: { invoiceNo: true } },
       leaseCheckout: {
         include: {
           lease: {
-            include: { unit: { select: { unitNumber: true } }, tenant: { select: { fullName: true } } }
+            select: {
+              unit: { select: { unitNumber: true } },
+              tenant: { select: { fullName: true } }
+            }
           }
         }
       }
@@ -124,12 +126,15 @@ export async function listExpensesForAdmin(take = 80): Promise<ExpenseListRow[]>
     take,
     include: {
       property: { select: { code: true, name: true } },
-      lease: { include: { unit: true, tenant: { select: { fullName: true } } } },
+      lease: { select: leaseNestedForListLabel },
       ticket: { select: { ticketNo: true } },
       leaseCheckout: {
         include: {
           lease: {
-            include: { unit: { select: { unitNumber: true } }, tenant: { select: { fullName: true } } }
+            select: {
+              unit: { select: { unitNumber: true } },
+              tenant: { select: { fullName: true } }
+            }
           }
         }
       }
@@ -162,10 +167,7 @@ export async function listLeaseOptionsForAccounting(): Promise<LeaseOption[]> {
   const rows = await prisma.lease.findMany({
     orderBy: { createdAt: "desc" },
     take: 200,
-    include: {
-      unit: { select: { unitNumber: true } },
-      tenant: { select: { fullName: true, email: true } }
-    }
+    select: leaseNestedForListLabel
   });
   return rows.map((l) => ({
     id: l.id,
@@ -227,7 +229,7 @@ export async function listCheckoutOptionsForAccounting(): Promise<CheckoutOption
     take: 150,
     include: {
       lease: {
-        include: {
+        select: {
           unit: { select: { unitNumber: true } },
           tenant: { select: { fullName: true } }
         }
