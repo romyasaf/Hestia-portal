@@ -36,7 +36,7 @@ Custom full-stack property management platform for **Hestia Real Estate Developm
 3. Start Postgres: `docker compose -f infra/docker-compose.yml up -d` (empty DB; schema is **not** auto-loaded).
 4. Apply schema and seeds to the `property_ops` database (includes **`super_admin`** role and admin user roles):
    - **Greenfield:** `docker exec -i property_ops_postgres psql -U app_user -d property_ops < db/schema.sql`
-   - **Upgrading an older DB:** apply `db/migrations/*.sql` in order (see [`db/MIGRATIONS.md`](db/MIGRATIONS.md)).
+   - **Upgrading an older DB:** apply `db/migrations/*.sql` in order (see [`db/MIGRATIONS.md`](db/MIGRATIONS.md)). If the app errors on missing `address_zone` / structured address columns after a pull, run **`pnpm --filter @hestia/web db:apply-015`** (or apply `015_property_structured_address.sql` with `psql` / Prisma as in `MIGRATIONS.md`).
    - `docker exec -i property_ops_postgres psql -U app_user -d property_ops < db/seeds/seed_roles.sql`
    - `docker exec -i property_ops_postgres psql -U app_user -d property_ops < db/seeds/seed_admin_user.sql`
 5. Configure **`apps/web/.env.local`** from `apps/web/.env.example` (`DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, `NEXT_PUBLIC_API_URL`).
@@ -52,3 +52,4 @@ Custom full-stack property management platform for **Hestia Real Estate Developm
 - **Active lease** is the primary operational pivot for tenant-scoped data.
 - **API-first** — web and mobile use the same backend.
 - **Role-aware** data access on every protected endpoint (see `docs/ARCHITECTURE.md`).
+# Hestia-portal
